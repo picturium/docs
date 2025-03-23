@@ -3,23 +3,23 @@
 layout: home
 
 hero:
-  name: "Picturium"
-  text: "Image delivery, reimagined"
-  tagline: My great project tagline
+  image: /title-image.webp
   actions:
     - theme: brand
-      text: Markdown Examples
-      link: /markdown-examples
-    - theme: alt
-      text: API Examples
-      link: /api-examples
+      text: Get Started
+      link: /documentation
 
 features:
-  - title: Feature A
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature B
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature C
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
+  - icon: ⚡
+    title: Lightning Fast
+    details: Built using Rust on top of libvips - one of the fastest image processing libraries out there.
+  - icon: 🤩
+    title: Developer Friendly
+    details: Forget about image processing complexity and deliver your application quicker.
+  - icon: 🤑
+    title: Budget Friendly
+    details: Save big with automatic image caching for even faster and more efficient image serving.
+  - icon: 🔑
+    title: Secure by Design
+    details: Easily prevent unauthorized access and resource exhaustion with HMAC verification.
 ---
-
