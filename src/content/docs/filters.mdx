@@ -1,0 +1,117 @@
+---
+title: Filters & effects
+description: Adjust tone and colour, blur or sharpen details, pixelate output, and apply monochrome or duotone palettes.
+---
+
+import DataTable from '../../components/DataTable.astro';
+import TransformFlow from '../../components/TransformFlow.astro';
+
+Use the grouped `filter=` parameter to apply one or more effects. Separate effects with
+`|`; picturium applies them from left to right, so changing their order can change the
+result.
+
+```text
+/photo.jpg?filter=brightness:1.1|contrast:1.2|blur:2
+```
+
+## The filter parameter
+
+Every segment is a filter name, a colon, and its value. Names are case-insensitive. An
+unknown name, missing colon, malformed value, or value outside its accepted range makes
+the request invalid.
+
+<DataTable
+  head={['Filter', 'Value', 'No-op', 'Effect']}
+  cols={['k', '', 'd', '']}
+  rows={[
+    ['brightness', 'float >= 0', '1', 'Scales brightness. 0 produces black; values above 1 brighten.'],
+    ['contrast', 'float >= 0', '1', 'Scales contrast around the midpoint.'],
+    ['saturate', 'float >= 0', '1', '0 removes colour; values above 1 increase saturation.'],
+    ['hue', 'degrees, 0-360', '0 or 360', 'Rotates hue using the CSS/SVG hue-rotate matrix.'],
+    ['grayscale', 'float, 0-1', '0', 'Blends from the source to full grayscale.'],
+    ['sepia', 'float, 0-1', '0', 'Blends from the source to full sepia.'],
+    ['invert', 'float, 0-1', '0', 'Blends from the source to fully inverted colours.'],
+    ['blur', 'integer >= 0', '0', 'Applies a Gaussian blur with the value as sigma.'],
+    ['sharpen', 'float, 0-10', '0', 'Applies sharpening with the value as sigma.'],
+    ['pixelate', 'integer >= 1', '1', 'Builds blocks approximately this many output pixels wide and high.'],
+    ['palette', '1-2 colours[, intensity]', 'intensity 0', 'Applies a monochrome or duotone palette.'],
+  ]}
+/>
+
+Brightness, contrast, and saturation have no fixed maximum. Values around `0` to `5`
+are the useful range for most images.
+
+## Tone & colour
+
+`brightness`, `contrast`, and `saturate` use `1` as the unchanged value. `hue` uses
+degrees. Combine them when one adjustment alone is not enough:
+
+```text
+/photo.jpg?filter=brightness:1.08|contrast:1.15|saturate:0.85
+/photo.jpg?filter=hue:90|saturate:1.25
+```
+
+These colour operations leave an alpha channel unchanged. On grayscale sources,
+`saturate` and `hue` have nothing to adjust and leave the image unchanged.
+
+## Grayscale, sepia & invert
+
+These filters accept an amount from `0` to `1`, not a boolean. `0` leaves the source
+unchanged, `1` applies the full effect, and a fraction blends between them.
+
+```text
+/photo.jpg?filter=grayscale:1
+/photo.jpg?filter=sepia:0.65|contrast:1.1
+/photo.jpg?filter=invert:0.5
+```
+
+## Blur, sharpen & pixelate
+
+`blur` and `pixelate` accept whole numbers. `sharpen` accepts a decimal value up to `10`.
+
+```text
+/photo.jpg?w=900&filter=blur:3
+/photo.jpg?filter=sharpen:1.5
+/photo.jpg?w=800&h=600&filter=pixelate:12
+```
+
+Pixelation reduces the working dimensions by its factor, then restores the requested
+output size with nearest-neighbour scaling. The block size therefore follows the final
+dimensions selected by [Sizing & layout](/docs/sizing).
+
+## Palette
+
+Use one colour for a monochrome tone or two for a duotone. In a duotone, the first colour
+maps the light end and the second maps the dark end. Add an optional final number to set
+the blend intensity; it defaults to `1`, while `0` leaves the image unchanged.
+
+```text
+# Monochrome
+/photo.jpg?filter=palette:ff8a1f
+
+# Duotone: light, dark
+/photo.jpg?filter=palette:ffd633,16181f
+
+# Duotone at 70% intensity
+/photo.jpg?filter=palette:ffd633,16181f,0.7
+```
+
+Palette colours use the same syntax as `bg`, including CSS names and hex without `#`.
+Because commas separate the palette values, named or hex colours are the clearest form
+here.
+
+## Order & processing
+
+Filters run after rotation, [cropping](/docs/cropping), resizing, fitting, and padding,
+then the [watermark](/docs/watermarking) is drawn. Each filter receives the output of
+the one before it:
+
+<TransformFlow />
+
+Filters apply to every frame of an [animated image or video clip](/docs/animation). Blur, sharpen, and pixelate are run
+frame by frame so neighbouring frames do not bleed into one another. Filters are skipped
+when picturium returns the original source or a document response with
+[`f=pdf` or `f=svg`](/docs/output#format-selection).
+
+For the compact parameter table, see the [`filter` quick reference](/docs/reference#filter),
+or continue to [Watermarking](/docs/watermarking).

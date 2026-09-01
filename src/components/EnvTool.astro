@@ -1,0 +1,83 @@
+---
+// Converts a dotted config key into the PICTURIUM__ environment variable name.
+---
+<div class="env-tool">
+  <p>Enter a configuration key to convert it to the environment variable name picturium expects.</p>
+  <label for="env-key">Configuration key</label>
+  <div class="env-tool-row">
+    <input id="env-key" type="text" value="server.port" placeholder="output.quality_curves.jpeg.min" autocomplete="off" spellcheck="false" />
+    <output id="env-name" for="env-key">PICTURIUM__SERVER__PORT</output>
+    <button id="env-copy" type="button">Copy</button>
+  </div>
+</div>
+
+<script>
+  const envKey = document.getElementById('env-key') as HTMLInputElement;
+  const envName = document.getElementById('env-name') as HTMLOutputElement;
+  const envCopy = document.getElementById('env-copy') as HTMLButtonElement;
+  const updateEnvName = () => {
+    envName.textContent = envKey.value.trim()
+      ? `PICTURIUM__${envKey.value.trim().replaceAll('.', '__').toUpperCase()}`
+      : 'PICTURIUM__';
+  };
+  envKey.addEventListener('input', updateEnvName);
+  envCopy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(envName.textContent ?? ''); } catch {}
+    envCopy.textContent = 'Copied';
+    setTimeout(() => { envCopy.textContent = 'Copy'; }, 1100);
+  });
+</script>
+
+<style is:global>
+  .env-tool {
+    margin: 16px 0 14px;
+    padding: 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+  }
+  .env-tool label {
+    display: block;
+    margin-bottom: 7px;
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .env-tool p {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .env-tool-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) auto; }
+  .env-tool input, .env-tool output, .env-tool button {
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    background: var(--bg-0);
+    color: var(--ink-1);
+    font: 12px/1.5 var(--f-mono);
+  }
+  .env-tool input { border-radius: var(--r-sm) 0 0 var(--r-sm); }
+  .env-tool output { overflow-wrap: anywhere; border-left: 0; }
+  .env-tool button {
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    cursor: pointer;
+    color: var(--ink-2);
+  }
+  .env-tool button:hover { color: var(--ink-0); border-color: var(--line-2); }
+
+  .env-examples table { table-layout: fixed; }
+  .env-examples th:nth-child(1) { width: 42%; }
+  .env-examples th:nth-child(2) { width: 28%; }
+  .env-examples td.k, .env-examples td.d { white-space: normal; overflow-wrap: anywhere; }
+
+  @media (max-width: 700px) {
+    .env-tool-row { grid-template-columns: 1fr auto; }
+    .env-tool input { grid-column: 1 / -1; border-radius: var(--r-sm) var(--r-sm) 0 0; }
+    .env-tool output { border-left: 1px solid var(--line); border-top: 0; border-radius: 0 0 0 var(--r-sm); }
+    .env-tool button { border-top: 0; border-radius: 0 0 var(--r-sm) 0; }
+  }
+</style>

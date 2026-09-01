@@ -1,0 +1,203 @@
+---
+title: Sizing & layout
+description: Resize, fit, position, pad, rotate, and colour picturium image output through URL parameters.
+---
+
+import DataTable from '../../components/DataTable.astro';
+import TransformFlow from '../../components/TransformFlow.astro';
+
+Sizing starts with the source image or the region selected by [`crop`](/docs/cropping). picturium then
+resizes the content, applies the chosen fit mode, and adds `pad` last. These transforms
+apply to every frame of an [animation or extracted video clip](/docs/animation) and every
+[rendered document page](/docs/documents#page-selection).
+
+<TransformFlow />
+
+The next stages are documented in [Filters & effects](/docs/filters) and
+[Watermarking](/docs/watermarking).
+
+Sizing is skipped when the source itself is returned with `original=true`, `f=pdf`, or
+`f=svg`; see [Documents & vectors](/docs/documents) for those response paths.
+
+## Width, height, aspect ratio
+
+Use `w` / `width` and `h` / `height` for pixel dimensions. A value of `0`, an empty
+value, or an omitted parameter leaves that axis unset. With one axis set, picturium
+calculates the other from the source ratio unless `ar` supplies a different ratio.
+
+```text
+/photo.jpg?w=800
+/photo.jpg?h=600
+/photo.jpg?w=800&ar=16/9
+/photo.jpg?w=800&h=600
+```
+
+`ar` / `aspect_ratio` accepts:
+
+- `auto` — use the source ratio (default)
+- `square` — 1:1
+- `video` — 16:9
+- a fraction such as `4/3`, `16/10`, or `1/1`
+
+`ar=1` is invalid because a custom ratio must be a fraction. When neither `w` nor `h`
+is present, an explicit `ar` selects the largest area of that ratio inside the source.
+When both dimensions are present, they already define the box and `ar` is ignored.
+
+## Fit modes
+
+`fit` controls how the image fills a box defined by both dimensions or by an explicit
+aspect ratio. With only one dimension and no explicit `ar`, all modes produce the same
+proportional resize.
+
+<DataTable
+  head={['Mode', 'Result', 'Uses gravity']}
+  cols={['k', '', 'd']}
+  rows={[
+    ['cover', 'Preserves the source ratio, fills the box, and crops overflow.', 'yes'],
+    ['contain', 'Preserves the source ratio and fills unused canvas space.', 'yes'],
+    ['force', 'Stretches width and height independently to match the box.', 'no'],
+  ]}
+/>
+
+`cover` is the default. Use `contain` when the entire image must remain visible, and
+`force` only when changing its proportions is intentional.
+
+```text
+/photo.jpg?w=800&h=600&fit=cover
+/photo.jpg?w=800&h=600&fit=contain&bg=white
+/photo.jpg?w=800&h=600&fit=force
+```
+
+## Gravity
+
+`g` / `gravity` chooses which area `cover` keeps and where `contain` places its content:
+
+<p class="fmt">top · right · bottom · left · top-left · top-right · bottom-left · bottom-right · center · attention · entropy</p>
+
+The default is `center`, configurable with `image.gravity`. `attention` and `entropy`
+ask libvips to choose an interesting crop for a still image. Animated images fall back
+to `center` so every frame uses the same crop.
+
+```text
+/portrait.jpg?w=600&h=600&fit=cover&g=top
+/landscape.jpg?w=600&h=600&fit=cover&g=attention
+/logo.png?w=800&h=600&fit=contain&g=bottom-right
+```
+
+The grouped [`crop=` parameter](/docs/cropping#gravity-and-offsets) has its own gravity, which defaults to
+`image.crop_gravity`; it does not inherit this value.
+
+## Scaling: dpr, scale, upsize
+
+`dpr` and `scale` both multiply the requested dimensions and compound with each other.
+For example, `w=400&dpr=2&scale=0.5` produces the same 400-pixel target width as `w=400`.
+
+<DataTable
+  head={['Parameter', 'Accepted value', 'Default', 'Effect']}
+  cols={['k', '', 'd', '']}
+  rows={[
+    ['dpr', 'float ≥ 1', '1', 'Multiplies dimensions; also scales request-supplied watermark padding, image scale, and text size.'],
+    ['scale', 'float > 0', '1', 'Multiplies the requested dimensions.'],
+    ['upsize', 'boolean', 'false', 'Allows output dimensions larger than the source.'],
+  ]}
+/>
+
+With `upsize=false`, a larger requested box is reduced to fit the source. When an
+explicit `ar` defines the box, it is reduced uniformly so that ratio survives. Set
+`upsize=true` when higher-density output must exceed the source dimensions.
+
+```text
+/icon.png?w=64&h=64&dpr=2&upsize=true
+```
+
+The `image.upsize` configuration key sets the default for requests that omit `upsize`.
+
+## Resampling
+
+`resample` selects the kernel used when pixels are resized:
+
+<DataTable
+  head={['Value', 'Use']}
+  cols={['k', '']}
+  rows={[
+    ['nearest', 'Hard pixel edges; useful for pixel art and masks.'],
+    ['linear', 'Fast interpolation with a softer result.'],
+    ['cubic', 'Cubic interpolation.'],
+    ['lanczos2', 'Sharper Lanczos interpolation with a smaller window.'],
+    ['lanczos3', 'Default; high-quality general-purpose resizing.'],
+  ]}
+/>
+
+The default comes from `image.resample` and is `lanczos3` unless configured otherwise.
+
+## Padding & extend
+
+`pad` / `padding` adds pixels after fitting. It accepts one to four comma-separated
+unsigned integers, using CSS side order:
+
+<DataTable
+  head={['Value', 'Sides']}
+  cols={['k', '']}
+  rows={[
+    ['10', '10 on every side'],
+    ['10,20', '10 top/bottom; 20 left/right'],
+    ['10,20,30', '10 top; 20 left/right; 30 bottom'],
+    ['10,20,30,40', 'top, right, bottom, left'],
+  ]}
+/>
+
+`extend` chooses how both padding and a `contain` canvas are filled:
+
+- `bg` — use `bg` / `background` (default)
+- `copy` — repeat the nearest edge pixel
+- `repeat` — tile the image
+- `mirror` — tile mirrored copies
+
+```text
+/photo.jpg?w=800&h=600&fit=contain&pad=24&extend=bg&bg=white
+/tile.png?pad=40&extend=repeat
+```
+
+The defaults come from `image.extend` (`bg`) and the transparent background colour.
+
+## Rotation
+
+`autorot` / `auto_rotate` applies the source's EXIF orientation and defaults to the
+`image.auto_rotate` setting (`true` by default). `rot` / `rotate` then applies an
+explicit quarter-turn before cropping and sizing.
+
+<DataTable
+  head={['Rotation', 'Accepted values']}
+  cols={['k', '']}
+  rows={[
+    ['none', '0 · no'],
+    ['90° anticlockwise', '90 · left · anticlockwise'],
+    ['180°', '180 · bottom-up'],
+    ['90° clockwise', '270 · right · clockwise'],
+  ]}
+/>
+
+```text
+/scan.jpg?autorot=false&rot=right&w=1000
+```
+
+Only these quarter-turns are accepted by the top-level rotation parameter.
+
+## Background colour
+
+`bg` / `background` supplies the colour used by `extend=bg`, contained canvas space,
+padding, and formats that must flatten transparency. It defaults to transparent.
+
+Accepted values include CSS colour names, hex without `#`, and `rgb()`, `rgba()`,
+`hsl()`, `hsla()`, `hwb()`, `oklab()`, and `oklch()` forms. Do not put a raw `#` in a
+URL query because browsers treat it as the start of a fragment.
+
+```text
+/logo.png?w=600&h=400&fit=contain&bg=transparent
+/logo.png?w=600&h=400&fit=contain&bg=ff8a1f
+/logo.png?pad=32&bg=rgb(16,18,24)
+```
+
+Encoding happens after these geometry stages. See [Output format & quality](/docs/output)
+for format selection, quality, metadata, and output byte limits, or the compact
+[URL parameter reference](/docs/reference) for aliases and defaults.

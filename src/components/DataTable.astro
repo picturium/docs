@@ -1,0 +1,23 @@
+---
+// Every docs table: same chrome, same column classes. `cols` gives the per-column
+// class ('k' = key/mono, 'd' = default/mono-dim, '' = prose); it defaults to a
+// mono first column. The mobile card layout gets its labels from thead in
+// DocPage's script.
+interface Props {
+  head: string[];
+  rows: (string | number)[][];
+  cols?: string[];
+  class?: string;
+}
+const { head, rows, cols = ['k'], class: extra } = Astro.props;
+---
+<div class:list={['tbl-wrap', extra]}>
+  <table>
+    <thead><tr>{head.map((h) => <th>{h}</th>)}</tr></thead>
+    <tbody>
+      {rows.map((row) => (
+        <tr>{row.map((cell, i) => <td class={cols[i] || undefined}>{cell}</td>)}</tr>
+      ))}
+    </tbody>
+  </table>
+</div>

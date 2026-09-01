@@ -1,0 +1,374 @@
+---
+import { getCollection } from 'astro:content';
+
+const routes = (await getCollection('docs')).map((doc) => `/docs/${doc.id}`);
+---
+
+<button class="search-trigger" id="search-trigger" type="button" aria-haspopup="dialog" aria-label="Search docs">
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5" />
+    <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  </svg>
+  <span>Search docs</span>
+  <kbd>/</kbd>
+</button>
+
+<dialog class="search-dialog" id="search-dialog" aria-labelledby="search-title">
+  <div class="search-frame">
+    <div class="search-bar">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5" />
+        <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+      <label id="search-title" for="docs-search-input">Search documentation</label>
+      <input id="docs-search-input" type="search" placeholder="Try “cache”, “AVIF” or “force”" autocomplete="off" spellcheck="false" />
+      <form method="dialog"><button class="search-close" aria-label="Close search">Esc</button></form>
+    </div>
+    <div class="search-results" id="search-results" aria-live="polite">
+      <p class="search-state">Type at least two characters to search every documentation page.</p>
+    </div>
+    <p class="search-foot"><span>Full-text search</span><span><kbd>Esc</kbd> to close</span></p>
+  </div>
+</dialog>
+
+<script type="application/json" id="docs-search-routes" set:html={JSON.stringify(routes)} />
+
+<script>
+  type SearchEntry = { title: string; page: string; href: string; text: string; normalized: string };
+
+  const dialog = document.querySelector<HTMLDialogElement>('#search-dialog')!;
+  const trigger = document.querySelector<HTMLButtonElement>('#search-trigger')!;
+  const input = document.querySelector<HTMLInputElement>('#docs-search-input')!;
+  const results = document.querySelector<HTMLElement>('#search-results')!;
+  const routes = JSON.parse(document.querySelector('#docs-search-routes')!.textContent!) as string[];
+  let index: Promise<SearchEntry[]> | undefined;
+
+  const normalize = (value: string) =>
+    value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  // the markdown body is flat: an h2 opens a section that runs until the next one
+  const sectionOf = (heading: Element) => {
+    const nodes = [heading];
+    for (let node = heading.nextElementSibling; node && node.tagName !== 'H2'; node = node.nextElementSibling) {
+      nodes.push(node);
+    }
+    return nodes;
+  };
+
+  const TEXT = 'h1, h2, h3, p, li, th, td, pre';
+  const textOf = (nodes: Element[]) => nodes
+    .flatMap((node) => [...(node.matches(TEXT) ? [node] : []), ...node.querySelectorAll(TEXT)])
+    .filter((element) => !element.closest('.crumb'))
+    .map((element) => element.textContent?.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ');
+
+  const buildIndex = () => Promise.all(routes.map(async (route) => {
+    const response = await fetch(route);
+    if (!response.ok) throw new Error(`Could not index ${route}`);
+    const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const body = doc.querySelector('.ref-main')!;
+    const page = body.querySelector('h1')?.textContent?.replace(/v\d+(?:\.\d+)*/i, '').trim() || doc.title;
+
+    const headings = [...body.querySelectorAll('h2[id]')];
+    // everything above the first h2 (breadcrumb aside) is the page's own intro
+    const intro = [...body.children].slice(0, headings[0] ? [...body.children].indexOf(headings[0]) : undefined);
+    const sections = [{ title: page, id: '', nodes: intro }, ...headings.map((heading) => ({
+      title: heading.textContent?.trim() || page,
+      id: heading.id,
+      nodes: sectionOf(heading),
+    }))];
+
+    return sections.map(({ title, id, nodes }) => {
+      const text = textOf(nodes);
+      return {
+        title,
+        page,
+        href: id ? `${route}#${id}` : route,
+        text,
+        normalized: normalize(`${title} ${page} ${text}`),
+      };
+    });
+  })).then((pages) => pages.flat());
+
+  const state = (message: string) => {
+    results.replaceChildren(Object.assign(document.createElement('p'), { className: 'search-state', textContent: message }));
+  };
+
+  const excerpt = (text: string, terms: string[]) => {
+    const lower = text.toLowerCase();
+    const at = Math.max(0, terms.map((term) => lower.indexOf(term)).find((i) => i >= 0) ?? 0);
+    const start = Math.max(0, at - 72);
+    const end = Math.min(text.length, at + 150);
+    return `${start ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`;
+  };
+
+  const appendHighlighted = (element: HTMLElement, text: string, terms: string[]) => {
+    const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const matcher = new RegExp(`(${escaped.join('|')})`, 'giu');
+    for (const part of text.split(matcher)) {
+      element.append(terms.includes(normalize(part))
+        ? Object.assign(document.createElement('mark'), { textContent: part })
+        : document.createTextNode(part));
+    }
+  };
+
+  const search = async () => {
+    const query = normalize(input.value);
+    const terms = query.split(' ').filter(Boolean);
+    if (query.length < 2) return state('Type at least two characters to search every documentation page.');
+    state('Searching…');
+
+    try {
+      const entries = await (index ??= buildIndex());
+      if (query !== normalize(input.value)) return;
+      const matches = entries
+        .filter((entry) => terms.every((term) => entry.normalized.includes(term)))
+        .sort((a, b) => terms.filter((term) => normalize(b.title).includes(term)).length - terms.filter((term) => normalize(a.title).includes(term)).length)
+        .slice(0, 12);
+
+      if (!matches.length) return state(`No documentation found for “${input.value.trim()}”.`);
+      const list = document.createElement('ul');
+      list.className = 'search-list';
+      for (const match of matches) {
+        const link = document.createElement('a');
+        const destination = new URL(match.href, location.origin);
+        destination.searchParams.set('search', input.value.trim());
+        link.href = `${destination.pathname}${destination.search}${destination.hash}`;
+        const snippet = document.createElement('p');
+        appendHighlighted(snippet, excerpt(match.text, terms), terms);
+        link.append(
+          Object.assign(document.createElement('strong'), { textContent: match.title }),
+          Object.assign(document.createElement('span'), { className: 'search-page', textContent: match.page }),
+          snippet,
+        );
+        const item = document.createElement('li');
+        item.append(link);
+        list.append(item);
+      }
+      results.replaceChildren(list);
+    } catch {
+      state('Search could not load. Refresh the page and try again.');
+    }
+  };
+
+  const open = () => {
+    if (!dialog.open) dialog.showModal();
+    index ??= buildIndex();
+    requestAnimationFrame(() => input.focus());
+  };
+
+  trigger.addEventListener('click', open);
+  input.addEventListener('input', search);
+  // a result pointing at the URL we are already on navigates nowhere, so the
+  // dialog would stay open with nothing behind it having changed
+  results.addEventListener('click', (event) => {
+    if ((event.target as Element).closest('a')) dialog.close();
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  document.addEventListener('keydown', (event) => {
+    const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+    if ((event.key === '/' && !typing) || ((event.metaKey || event.ctrlKey) && event.key === 'k')) {
+      event.preventDefault();
+      open();
+    }
+  });
+
+  const arrivalQuery = new URLSearchParams(location.search).get('search');
+  if (arrivalQuery) {
+    const terms = normalize(arrivalQuery).split(' ').filter(Boolean);
+    const heading = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+    const scope: Element[] = heading ? sectionOf(heading) : [document.querySelector('main')!];
+    const candidates = scope.flatMap((node) => [...node.querySelectorAll<HTMLElement>('p, li, td, pre')]);
+    const hit = candidates.find((candidate) => terms.every((term) => normalize(candidate.textContent || '').includes(term)))
+      || (heading as HTMLElement | null)
+      || document.querySelector<HTMLElement>('main');
+    if (hit) {
+      hit.classList.add('search-arrival');
+      requestAnimationFrame(() => hit.scrollIntoView({ block: 'center' }));
+    }
+  }
+</script>
+
+<style>
+  .search-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 9px 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--bg-1);
+    color: var(--ink-2);
+    cursor: pointer;
+    font-size: 13px;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .search-trigger:hover { border-color: var(--line-2); background: var(--bg-2); color: var(--ink-0); }
+  kbd {
+    min-width: 20px;
+    padding: 1px 5px;
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    background: var(--bg-2);
+    color: var(--ink-3);
+    font: 10px/1.6 var(--f-mono);
+    text-align: center;
+  }
+
+  .search-dialog {
+    width: min(680px, calc(100vw - 28px));
+    max-height: min(720px, calc(100vh - 48px));
+    margin: 10vh auto 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+    color: var(--ink-1);
+    box-shadow: 0 30px 100px rgba(0, 0, 0, 0.72);
+  }
+  .search-dialog[open] {
+    animation: search-pop 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .search-dialog::backdrop {
+    background: rgba(4, 5, 7, 0.78);
+    backdrop-filter: blur(5px);
+    animation: search-backdrop 260ms ease-out both;
+  }
+  .search-frame { position: relative; }
+  .search-frame::before {
+    content: "";
+    display: block;
+    height: 4px;
+    background: var(--rainbow);
+    mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 8px);
+    transform-origin: left;
+    animation: search-spectrum 520ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .search-bar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--ink-3);
+    animation: search-resolve 420ms 70ms ease-out both;
+  }
+  .search-bar label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .search-bar input {
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--ink-0);
+    font: 500 17px var(--f-display);
+  }
+  .search-bar input::placeholder { color: var(--ink-3); }
+  .search-close {
+    padding: 3px 7px;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-sm);
+    background: var(--bg-2);
+    color: var(--ink-3);
+    font: 10px/1.5 var(--f-mono);
+    cursor: pointer;
+  }
+  .search-results { min-height: 190px; max-height: min(56vh, 500px); overflow: hidden auto; padding: 8px; }
+  .search-results :global(.search-state) { margin: 0; padding: 54px 20px; color: var(--ink-3); font-size: 13px; text-align: center; }
+  .search-results :global(.search-list) { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+  .search-results :global(.search-list li) { animation: search-result 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .search-results :global(.search-list li:nth-child(2)) { animation-delay: 35ms; }
+  .search-results :global(.search-list li:nth-child(3)) { animation-delay: 70ms; }
+  .search-results :global(.search-list li:nth-child(4)) { animation-delay: 105ms; }
+  .search-results :global(.search-list li:nth-child(n + 5)) { animation-delay: 140ms; }
+  .search-results :global(.search-list a) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 16px;
+    padding: 13px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+  }
+  .search-results :global(.search-list a:hover), .search-results :global(.search-list a:focus-visible) { border-color: var(--line); outline: 0; background: var(--bg-2); }
+  .search-results :global(.search-list strong) { min-width: 0; overflow-wrap: anywhere; color: var(--ink-0); font: 600 14px var(--f-display); }
+  .search-results :global(.search-page) { color: var(--ink-3); font: 10px/1.8 var(--f-mono); text-transform: uppercase; letter-spacing: 0.06em; }
+  .search-results :global(.search-list p) { grid-column: 1 / -1; min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--ink-2); font-size: 12.5px; line-height: 1.45; }
+  .search-results :global(mark) {
+    padding: 0 2px;
+    border-radius: 3px;
+    background: rgba(43, 212, 240, 0.2);
+    box-shadow: 0 0 12px rgba(43, 212, 240, 0.14);
+    color: var(--ink-0);
+  }
+  :global(.search-arrival) {
+    scroll-margin-top: calc(var(--nav-h, 72px) + 24px);
+    border-radius: var(--r-sm);
+    outline: 1px solid rgba(43, 212, 240, 0.3);
+    background: rgba(43, 212, 240, 0.08);
+    box-shadow: inset 3px 0 var(--accent), 0 0 28px rgba(43, 212, 240, 0.08);
+    animation: search-arrival 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  :global(main [class].search-arrival:not(td)) {
+    width: 100%;
+    max-width: none;
+    padding: 8px 12px;
+  }
+  :global(main td[class].search-arrival) { padding: 10px 12px; }
+  .search-foot {
+    display: flex;
+    justify-content: space-between;
+    margin: 0;
+    padding: 9px 14px;
+    border-top: 1px solid var(--line-soft);
+    color: var(--ink-4);
+    font: 10px var(--f-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .search-foot span:last-child { display: flex; align-items: center; gap: 6px; }
+
+  @keyframes search-pop {
+    from { opacity: 0; transform: perspective(900px) translateY(-22px) scale(0.94) rotateX(6deg); }
+    to { opacity: 1; transform: perspective(900px) translateY(0) scale(1) rotateX(0); }
+  }
+  @keyframes search-backdrop {
+    from { background: rgba(4, 5, 7, 0); backdrop-filter: blur(0); }
+  }
+  @keyframes search-spectrum {
+    from { transform: scaleX(0); filter: brightness(2); }
+    to { transform: scaleX(1); filter: brightness(1); }
+  }
+  @keyframes search-resolve {
+    from { opacity: 0; transform: translateY(-6px); }
+  }
+  @keyframes search-result {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  @keyframes search-arrival {
+    0% { outline-color: rgba(43, 212, 240, 0); background: rgba(43, 212, 240, 0); box-shadow: inset 0 0 var(--accent), 0 0 0 rgba(43, 212, 240, 0); }
+    35% { outline-color: rgba(43, 212, 240, 0.7); background: rgba(43, 212, 240, 0.18); box-shadow: inset 5px 0 var(--accent), 0 0 42px rgba(43, 212, 240, 0.2); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .search-dialog[open],
+    .search-dialog::backdrop,
+    .search-frame::before,
+    .search-bar,
+    .search-results :global(.search-list li),
+    :global(.search-arrival) { animation: none; }
+  }
+
+  @media (max-width: 720px) {
+    .search-trigger span, .search-trigger kbd { display: none; }
+    .search-trigger { width: 38px; justify-content: center; padding: 0; }
+    .search-dialog { margin-top: 16px; }
+    .search-results :global(.search-page) { display: none; }
+  }
+</style>

@@ -1,0 +1,140 @@
+---
+title: Animation & video
+description: Preserve or reshape animated images, flatten them to a still, and extract still frames or animated clips from video.
+---
+
+import DataTable from '../../components/DataTable.astro';
+
+picturium treats animated images and videos differently. An animated image keeps its
+frames by default. A video produces one still frame by default and becomes a clip only
+when `anim` contains a frame, timing, loop, or stride control.
+
+```text
+/spinner.gif?w=240&f=webp
+/intro.mp4?t=5.25&w=1280&f=webp
+/intro.mp4?t=5&anim=frames:36|fps:12&f=webp
+```
+
+Only WebP and GIF outputs can carry more than one frame. Use `f=webp` or `f=gif` when
+the response must stay animated; JPEG, PNG, AVIF, and JXL return the first selected
+frame. `f=auto` may select a still-only format from the client's `Accept` header.
+
+## Animated images
+
+Animated GIF and WebP, AVIF/HEIC sequences, and multi-page TIFF sources keep their
+animation without an `anim` parameter. Their source delays and loop count are preserved.
+Multi-page [documents selected for raster output](/docs/documents#page-selection) can
+also become an animation.
+
+```text
+# Preserve the source animation and resize every frame.
+/loader.gif?w=320&f=webp
+
+# Start at the third source frame.
+/loader.gif?page=3&f=webp
+
+# Return one still frame.
+/loader.gif?anim=off&f=png
+```
+
+`page` / `pages` selects the starting frame; only the first value matters for an
+animated source. The frame count then starts at that position. APNG is an exception:
+the PNG loader reads only its first frame.
+
+The grouped [crop](/docs/cropping), [sizing](/docs/sizing),
+[filters](/docs/filters), and [watermark](/docs/watermarking) stages run on every kept
+frame. Smart gravity falls back to `center` for the top-level sizing crop; grouped
+`crop=g:attention` or `g:entropy` is evaluated separately on each frame.
+
+## The anim parameter
+
+Use `anim` or `animate`. Join case-sensitive `key:value` segments with `|`:
+
+```text
+/loader.gif?anim=frames:24|stride:2|fps:15|loop:0&f=webp
+```
+
+<DataTable
+  head={['Key', 'Accepted value', 'Animated image default', 'Effect']}
+  cols={['k', '', 'd', '']}
+  rows={[
+    ['frames', 'integer', 'all available frames', 'Keeps at most this many frames from the selected start. A value below 1 also means all.'],
+    ['timing', '5–5000 ms', 'source delay, or 100 ms', 'Replaces every frame delay. Cannot be combined with fps.'],
+    ['fps', 'float > 0', 'source delay', 'Sets the rate by converting it to a frame delay. Cannot be combined with timing.'],
+    ['loop', 'integer 0–65535', 'source loop count', 'Sets the repeat count; 0 means forever.'],
+    ['stride', 'integer ≥ 1', '1', 'Keeps every Nth source frame.'],
+  ]}
+/>
+
+`anim=off`, `anim=false`, `anim=no`, and `anim=0` flatten the response to one frame.
+An unknown key, a missing colon, `stride:0`, or both `timing` and `fps` make the request
+invalid. GIF stores delays in centiseconds, so it rounds millisecond timings that are
+not multiples of 10; WebP keeps millisecond timing.
+
+`output.max_animation_frames` caps animated-image frames and defaults to `300`. Set it
+to `0` for no server-wide cap. The cap is applied before frames are loaded, but each
+kept frame still runs through the full image pipeline, so frame count and dimensions
+both affect processing cost.
+
+## Video frames & clips
+
+Video input requires FFmpeg. Supported extensions are:
+
+<p class="fmt">mp4 · webm · mkv · avi · av1 · 3gp · m4v · flv · mov · mpeg · mts · hevc</p>
+
+### Extract one frame
+
+Use `t` / `time` with seconds or an FFmpeg-style timecode. picturium seeks before it
+decodes, so a distant timestamp does not require decoding every earlier frame.
+
+```text
+/movie.mp4?t=5&f=jpeg
+/movie.mp4?t=5.25&w=1280&f=webp
+/movie.mp4?t=00:01:30&crop=ar:video|g:center&w=960&f=avif
+```
+
+When `t` is omitted, `video.default_time` is used (`1` second by default, avoiding many
+black opening frames). If that configured default is past the end, picturium retries at
+the start of the video. An explicit out-of-range `t` is not retried and processing
+fails. `page` does not select video frames.
+
+### Extract an animated clip
+
+Supply at least one actual `anim` key and choose WebP or GIF output. `t` becomes the
+clip start, `frames` its returned frame count, and `timing` or `fps` its sample rate.
+
+```text
+# 48 frames at the configured 12 fps, starting at 10 seconds.
+/movie.mp4?t=10&anim=loop:0&f=webp
+
+# 30 frames at 10 fps: a three-second clip.
+/movie.mp4?t=10&anim=frames:30|fps:10|loop:0&f=webp
+
+# Keep 30 frames but sample one fifth as often: fifteen seconds of footage.
+/movie.mp4?t=10&anim=frames:30|fps:10|stride:5&f=gif
+```
+
+For video, `stride` divides the sample rate instead of removing frames after extraction.
+The requested frame count stays the same and spans proportionally more footage. A bare
+`anim=` has no controls and therefore still returns one frame. A still-only output
+format also returns one frame even when `anim` has controls.
+
+<DataTable
+  head={['Config key', 'Default', 'Purpose']}
+  cols={['k', 'd', '']}
+  rows={[
+    ['video.default_time', '"1"', 'Timestamp used when t is omitted.'],
+    ['video.extraction_timeout', '15 seconds', 'Time limit for one still-frame extraction.'],
+    ['video.animation_timeout', '60 seconds', 'Time limit for clip extraction.'],
+    ['video.animation_frames', '48', 'Clip frame count when anim omits frames.'],
+    ['video.animation_fps', '12', 'Clip sample rate when anim omits timing and fps.'],
+    ['video.max_animation_frames', '300', 'Hard ceiling on frames in one video clip.'],
+  ]}
+/>
+
+The clip is extracted to a temporary lossless animated WebP, then passed through the
+same crop, sizing, filter, watermark, quality, and final encoding stages as an animated
+image. Long, dense clips decode the intervening video frames and can be expensive;
+widely spaced samples are sought separately. See the [`[video]` config
+reference](/docs/config-keys#video) to tune defaults and timeouts, and [Output format &
+quality](/docs/output) for WebP and GIF encoder controls.

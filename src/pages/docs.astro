@@ -1,0 +1,370 @@
+---
+import Base from '../layouts/Base.astro';
+import { DOCS_NAV, DOC_GROUPS, QUICK_REFERENCE } from '../docs-nav';
+import { VERSION } from '../consts';
+
+// continuous 01.. index across all groups
+let n = 0;
+const groups = DOC_GROUPS.map((g) => ({
+  ...g,
+  cats: DOCS_NAV.filter((c) => c.group === g.slug).map((c) => ({ ...c, index: ++n })),
+}));
+---
+<Base title="picturium — docs" description="Learn how to install, configure, and use picturium.">
+  <main class="docs-home">
+    <div class="bg-layer bg-grid"></div>
+
+    <header class="docs-head">
+      <h1>Documentation <span class="ver">v{VERSION}</span></h1>
+    </header>
+
+    <a class="quickref" href={`/docs/${QUICK_REFERENCE.slug}`}>
+      <div class="quickref-main">
+        <span class="quickref-tag">Quick reference</span>
+        <span class="quickref-sub">{QUICK_REFERENCE.summary}</span>
+      </div>
+      <ul class="quickref-links">
+        {QUICK_REFERENCE.pages.map((page) => <li>{page.title}</li>)}
+      </ul>
+      <svg class="quickref-go" width="14" height="14" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <path d="M3 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </a>
+
+    {groups.map((g) => (
+      <section class="stage">
+        <div class="stage-head">
+          <h2>{g.title}</h2>
+          <p>{g.summary}</p>
+        </div>
+
+        <div class="crossroads">
+          {g.cats.map((cat) => (
+            <a
+              class:list={['road', { 'road-soon': cat.comingSoon }]}
+              href={cat.comingSoon ? undefined : `/docs/${cat.slug}`}
+              aria-disabled={cat.comingSoon || undefined}
+            >
+              <span class="road-num">{String(cat.index).padStart(2, '0')}</span>
+              <h3>{cat.title}</h3>
+              <p>{cat.summary}</p>
+              <ul class="road-pages">
+                {cat.pages.slice(0, 4).map((page) => <li>{page.title}</li>)}
+                {cat.pages.length > 4 && <li class="more">+{cat.pages.length - 4} more</li>}
+              </ul>
+              {cat.comingSoon ? (
+                <span class="road-go">COMING SOON</span>
+              ) : (
+                <span class="road-go">
+                  READ
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M3 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+              )}
+            </a>
+          ))}
+        </div>
+      </section>
+    ))}
+  </main>
+</Base>
+
+<style>
+  .docs-home {
+    position: relative;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 88px 28px 120px;
+    overflow: hidden;
+  }
+  .docs-home .bg-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    mask-image: linear-gradient(180deg, #000 0%, transparent 40%);
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 40%);
+  }
+
+  .docs-head {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 40px;
+  }
+  .docs-head h1 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 42px;
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    color: var(--ink-0);
+  }
+  .docs-head > p {
+    max-width: 660px;
+    margin: 12px 0 0;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+  .docs-head .ver {
+    margin-left: 10px;
+    font-family: var(--f-mono);
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--ink-3);
+    vertical-align: middle;
+  }
+
+  /* quick reference — standalone, sits above the three stages */
+  .quickref {
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin: 0 0 56px;
+    padding: 18px 22px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+    transition: border-color 0.15s;
+  }
+  /* orange → yellow → green brand wash, drifting */
+  .quickref::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(42% 130% at 8% 0%, rgba(255, 138, 31, 0.62), transparent 62%),
+      radial-gradient(40% 140% at 40% 100%, rgba(255, 214, 51, 0.52), transparent 64%),
+      radial-gradient(48% 150% at 80% 6%, rgba(51, 224, 102, 0.50), transparent 62%),
+      radial-gradient(34% 130% at 100% 100%, rgba(255, 176, 32, 0.44), transparent 62%);
+    background-size: 200% 200%;
+    filter: blur(6px) saturate(150%);
+    opacity: 1;
+    animation: quickref-drift 14s ease-in-out infinite alternate;
+    transition: filter 0.5s ease, transform 0.5s ease;
+  }
+  /* pixel-dissolve: bg-coloured blocks that "resolve" into the smooth wash */
+  .quickref::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      repeating-conic-gradient(var(--bg-0) 0 25%, transparent 0 50%) 0 0 / 12px 12px,
+      repeating-conic-gradient(var(--bg-0) 0 25%, transparent 0 50%) 6px 6px / 24px 24px;
+    mask-image: linear-gradient(100deg, #000 0%, #000 12%, transparent 55%);
+    -webkit-mask-image: linear-gradient(100deg, #000 0%, #000 12%, transparent 55%);
+  }
+  .quickref:hover { border-color: var(--line-2); }
+  /* smooth: only interpolatable props change on hover, never animation-duration */
+  .quickref:hover::before { filter: blur(4px) saturate(185%); transform: scale(1.06); }
+  @keyframes quickref-drift {
+    from { background-position: 0% 50%, 100% 50%, 50% 0%, 100% 100%; }
+    to   { background-position: 45% 65%, 55% 35%, 35% 85%, 65% 35%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .quickref::after { animation: none; }
+  }
+  .quickref-main {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .quickref-tag {
+    font-family: var(--f-display);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-0);
+    text-shadow: 0 1px 6px rgba(8, 9, 11, 0.75);
+  }
+  .quickref-sub {
+    font-size: 12.5px;
+    color: var(--ink-1);
+    text-shadow: 0 1px 6px rgba(8, 9, 11, 0.75);
+  }
+  .quickref-links {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 20px;
+    border-left: 1px solid var(--line-soft);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+  }
+  .quickref-links li {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    color: var(--ink-2);
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-0);
+  }
+  .quickref-go { color: var(--ink-3); flex-shrink: 0; }
+  .quickref:hover .quickref-go { color: var(--accent); }
+
+  /* one stage = one group */
+  .stage {
+    position: relative;
+    z-index: 1;
+  }
+  .stage + .stage { margin-top: 52px; }
+  .stage-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .stage-head h2 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-0);
+  }
+  .stage-head p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+
+  /* the crossroads grid */
+  .crossroads {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+  }
+
+  .road {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 26px 24px 22px;
+    background: var(--bg-1);
+    position: relative;
+    transition: background 0.18s;
+  }
+  .road:hover { background: var(--bg-2); }
+  .road::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--rainbow);
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  .road:hover::after { opacity: 1; }
+
+  .road-num {
+    font-family: var(--f-pixel);
+    font-size: 30px;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .road h3 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink-0);
+  }
+  .road > p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+
+  .road-pages {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .road-pages li {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-0);
+  }
+  .road-pages li.more {
+    border-style: dashed;
+    color: var(--ink-4);
+  }
+
+  .road-go {
+    margin-top: auto;
+    padding-top: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    transition: color 0.15s;
+  }
+  .road:hover .road-go { color: var(--accent); }
+  .road-soon {
+    cursor: default;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(113, 77, 255, 0.19), rgba(31, 211, 255, 0.08) 55%, var(--bg-1));
+  }
+  .road-soon:hover { background: linear-gradient(135deg, rgba(113, 77, 255, 0.19), rgba(31, 211, 255, 0.08) 55%, var(--bg-1)); }
+  .road-soon:hover::after { opacity: 0; }
+  .road-soon .road-go {
+    align-self: flex-start;
+    padding: 5px 8px;
+    border: 1px solid rgba(202, 141, 255, 0.52);
+    border-radius: 999px;
+    color: #e0c1ff;
+    background: rgba(72, 39, 124, 0.32);
+  }
+
+  @media (max-width: 940px) {
+    .crossroads { grid-template-columns: repeat(2, 1fr); }
+    .docs-head h1 { font-size: 38px; }
+  }
+  @media (max-width: 700px) {
+    .quickref { flex-wrap: wrap; gap: 12px; padding: 16px; }
+    .quickref-main { flex-shrink: 1; min-width: 0; }
+    .quickref-links { padding-left: 0; border-left: 0; flex-basis: 100%; }
+  }
+  @media (max-width: 600px) {
+    .docs-home { padding: 48px 18px 72px; }
+    .docs-head h1 { font-size: 30px; }
+    .docs-head .ver { font-size: 13px; }
+    .crossroads { grid-template-columns: 1fr; }
+    .road { padding: 22px 18px 20px; }
+    .stage-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  }
+</style>

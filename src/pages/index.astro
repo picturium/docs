@@ -1,0 +1,1105 @@
+---
+import { statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import Base from '../layouts/Base.astro';
+import Playground from '../components/Playground.astro';
+import { VERSION, REPO, PICTURIUM, px } from '../consts';
+
+// Hero is a real picturium response; the chips below it are filled in from the
+// resource timing entry rather than hard-coded.
+const heroPath = '/samples/skyscraper.jpg';
+// The stage paints at 520 CSS px at most, so let the browser ask picturium for
+// the size it will actually use rather than a fixed 900×600. Candidates are 3:2
+// to match .stage-body — cropping in CSS would throw away the bytes the chip is
+// bragging about saving.
+const heroSizes = '(max-width: 980px) calc(100vw - 56px), 520px';
+const heroParamsFor = (w: number) => `w=${w}&h=${Math.round(w / 1.5)}&fit=cover&f=webp&q=82`;
+// cache= busts the browser/CDN copy per build (per request in dev), so the chip
+// times a real fetch. Stripped again before the URL bar renders it.
+const heroCacheBust = `cache=${Date.now()}`;
+const heroSrcset = [520, 760, 1040, 1560]
+  .map((w) => `${px(heroPath, `${heroParamsFor(w)}&${heroCacheBust}`)} ${w}w`)
+  .join(', ');
+// Picturium serves public/ as its source dir, so the original is right here —
+// no need to ask the server how big it was.
+const heroOriginalBytes = statSync(fileURLToPath(new URL(`../../public${heroPath}`, import.meta.url))).size;
+const heroCredit = {
+  by: 'Ü Lõ',
+  href: 'https://unsplash.com/photos/skyscraper-with-illuminated-vertical-lines-C-672vHXRAg',
+};
+
+// Pixel field behind the hero: 28px squares in the logo rainbow, spilling out
+// from behind the left edge of the image stage and thinning out to the left.
+// Deterministic (seeded) so the build is reproducible; one div, many shadows.
+const pixelField = (() => {
+  const hues = ['255, 58, 58', '255, 138, 31', '255, 214, 51', '51, 224, 102', '43, 212, 240', '58, 120, 255', '216, 60, 255'];
+  const cell = 28, cols = 26, rows = 27;
+  let seed = 0x9e3779b9;
+  const rand = () => (((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296));
+  const shadows: string[] = [];
+  for (let c = 0; c < cols; c++) {
+    // Density and alpha both fall off with distance from the stage.
+    const near = 1 - c / cols;
+    for (let r = 0; r < rows; r++) {
+      if (rand() > near * 0.55) continue;
+      const alpha = (0.10 + rand() * 0.30) * near;
+      shadows.push(`${-c * cell}px ${r * cell}px 0 rgba(${hues[(c + r) % hues.length]}, ${alpha.toFixed(3)})`);
+    }
+  }
+  return shadows.join(', ');
+})();
+
+const features = [
+  {
+    title: 'Resize & crop',
+    icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 13l5-5 4 4 4-4 5 5"/>',
+    body: 'Set <code>w</code> and <code>h</code>, choose a fit mode, and keep the most important part of the image in view.',
+    href: '/docs/sizing',
+  },
+  {
+    title: 'Rotate & flip',
+    icon: '<path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 3v6h6"/>',
+    body: 'Rotate by any angle or a 90° step, flip horizontally or vertically, and apply EXIF orientation automatically.',
+    href: '/docs/sizing',
+  },
+  {
+    title: 'Filters & effects',
+    icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/>',
+    body: 'Combine blur, sharpen, brightness, contrast, saturation, grayscale, hue rotation, and invert in one URL.',
+    href: '/docs/filters',
+  },
+  {
+    title: 'Format conversion',
+    icon: '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/><path d="M8 11l4 4 4-4"/><path d="M12 4v11"/>',
+    body: 'Return WebP, AVIF, JPEG, or PNG. Automatic mode uses the client\'s <code>Accept</code> header and falls back safely.',
+    href: '/docs/output',
+  },
+  {
+    title: 'Quality control',
+    icon: '<path d="M3 6l9 4 9-4-9-4-9 4z"/><path d="M3 12l9 4 9-4"/><path d="M3 18l9 4 9-4"/>',
+    body: 'Set <code>q=1..100</code> per request, use format-aware defaults, or keep PNG and WebP output lossless.',
+    href: '/docs/output',
+  },
+  {
+    title: 'Written in Rust',
+    icon: '<path d="M13 2L3 14h7v8l10-12h-7z"/>',
+    body: 'Built with <code>axum</code> and <code>libvips</code> and shipped as a single static binary.',
+  },
+  {
+    title: 'On-disk cache',
+    icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12l8.73-5.04"/><path d="M12 22V12"/>',
+    body: 'The URL is the cache key. Repeated requests can return the cached result without rendering it again.',
+    href: '/docs/request-model',
+  },
+  {
+    title: 'Files, not just images',
+    icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+    body: 'Allow selected non-image files to pass through unchanged, with the correct MIME type and byte-range support.',
+    href: '/docs/documents',
+  },
+];
+
+const stats = [
+  { label: 'Cold transform · p50', value: '11', unit: 'ms', hint: '1920×1080 jpg → 600w webp' },
+  { label: 'Warm cache · p50', value: '0.7', unit: 'ms', hint: 'straight off the disk cache' },
+  { label: 'Throughput', value: '14.2', unit: 'k/s', hint: 'requests per second, c=64' },
+  { label: 'Binary size', value: '9.4', unit: 'MB', hint: 'single static executable' },
+];
+---
+<Base
+  title="picturium — images, on request"
+  description="The path chooses the source. The query string describes the result. picturium renders, caches, and serves the image you asked for."
+>
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="bg-layer bg-pixels" aria-hidden="true"><i style={`box-shadow:${pixelField}`}></i></div>
+
+      <div class="hero-inner">
+        <div class="hero-heading">
+          <h1 class="hero-h1">
+              Perfect image, <span class="accent" >everytime.</span>
+          </h1>
+        </div>
+
+        <div class="hero-copy">
+          <p class="hero-sub">
+              Picturium is an ultrafast media processing server that resizes, converts,
+              and caches <em style="font-family: var(--f-display)">(not just)</em> your images on the fly -
+              so your users get pixel-perfect assets at the speed of light.
+          </p>
+          <div class="hero-ctas">
+            <a class="btn btn-primary" href="/docs">Get started</a>
+            <a class="btn" href="#playground">
+              Try it yourself
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M3 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+          </div>
+          <div class="hero-meta">
+            <span>MIT licensed</span>
+            <span class="dot"></span>
+            <span>Written in Rust</span>
+            <span class="dot"></span>
+            <span>Docker-ready</span>
+          </div>
+        </div>
+
+        <!-- right column: URL → image stage -->
+        <aside class="hero-stage" aria-label="URL transformation example">
+          <div class="stage-head">
+            <span class="stage-method">GET</span>
+            <div class="url-bar">
+              <svg class="url-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+              <span class="host">{new URL(PICTURIUM).host}</span>
+              <span class="path">{heroPath}</span><span class="params" id="hero-url-params">?{heroParamsFor(1040)}</span>
+            </div>
+          </div>
+          <div class="stage-body">
+            <img
+              class="stage-img"
+              id="hero-img"
+              src={px(heroPath, `${heroParamsFor(1040)}&${heroCacheBust}`)}
+              srcset={heroSrcset}
+              sizes={heroSizes}
+              width="1040"
+              height="693"
+              alt=""
+              data-original={heroOriginalBytes}
+            />
+            <div class="stage-overlay">
+              <div class="chip-group">
+                <span class="stage-chip"><svg class="chip-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg><span id="hero-size">900 × 600 · webp</span></span>
+                <span class="stage-chip" id="hero-ms"></span>
+              </div>
+              <span class="stage-chip stage-chip-delta" id="hero-delta"></span>
+            </div>
+          </div>
+          <p class="stage-credit">
+            Photo by <a href={heroCredit.href} target="_blank" rel="noopener noreferrer">{heroCredit.by}</a>
+            on <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer">Unsplash</a>
+          </p>
+        </aside>
+      </div>
+    </section>
+
+    <div class="ribbon"></div>
+
+    <!-- LOGOS -->
+    <section class="logos-band">
+      <div class="logos-inner">
+        <p>Quietly serving images at</p>
+        <div class="logos-row">
+          <a class="logo-mark" href="https://moderneobce.sk/" target="_blank" rel="noopener">
+            <img src="/logos/moderneobce.svg" alt="Moderné Obce" />
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how" id="how">
+      <div class="section-head">
+        <h2>One URL in. One image out.</h2>
+        <p>No more generating thumbnails and building complex processing pipelines. picturium reads the URL parameters, transforms the file, and caches the result.</p>
+      </div>
+
+      <div class="how-flow">
+        <div class="flow-step">
+          <span class="num">01</span>
+          <h3>Point at any source</h3>
+          <p>Use a local folder, an S3 bucket, or any other mounted source. There is no separate import step.</p>
+          <div class="code"><span class="k">root</span>=<span class="v">"./media"</span></div>
+        </div>
+        <div class="flow-arrow">
+          <svg viewBox="0 0 80 20" preserveAspectRatio="none"><path d="M0 10 L70 10 M62 4 L72 10 L62 16" fill="none" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+        </div>
+        <div class="flow-step">
+          <span class="num">02</span>
+          <h3>Ask in the URL</h3>
+          <p>Add the size, crop, rotation, effects, format, and quality you want as URL parameters. No SDK is required.</p>
+          <div class="code">/cat.jpg?<span class="k">w</span>=<span class="v">600</span>&amp;<span class="k">fit</span>=<span class="v">cover</span></div>
+        </div>
+        <div class="flow-arrow">
+          <svg viewBox="0 0 80 20" preserveAspectRatio="none"><path d="M0 10 L70 10 M62 4 L72 10 L62 16" fill="none" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+        </div>
+        <div class="flow-step">
+          <span class="num">03</span>
+          <h3>Get it back, cached</h3>
+          <p>Rust and libvips render the image, then picturium caches the result by URL for later requests.</p>
+          <div class="code"><span class="ok">200 OK</span> · <span class="v">image/webp</span> · 12ms</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features">
+      <div class="section-head">
+        <h2>What it can do</h2>
+        <p>Common image CDN features, available as URL parameters and running on your own hardware.</p>
+      </div>
+
+      <div class="feature-grid">
+        {features.map((f) => {
+          const Tag = f.href ? 'a' : 'article';
+          return (
+            <Tag class="feature" href={f.href}>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" set:html={f.icon} />
+              <h3>{f.title}</h3>
+              <p set:html={f.body} />
+            </Tag>
+          );
+        })}
+      </div>
+    </section>
+
+    <!-- PLAYGROUND -->
+    <section class="playground" id="playground">
+      <div class="section-head">
+        <h2>Try it yourself!</h2>
+        <p>Adjust parameters on the right a watch the image come to life</p>
+      </div>
+      <div class="playground-wrap"><Playground /></div>
+    </section>
+
+    <!-- INSTALL -->
+    <section class="install" id="install">
+      <div class="install-grid">
+        <div class="install-copy">
+          <h2 style="margin-top:14px">Get started in minutes.</h2>
+          <p>Run one binary, point it at a folder or mounted bucket, and start transforming files.</p>
+          <ul class="install-list">
+            <li>Single static binary — no runtime, no JVM</li>
+            <li>Ships as a Docker image — <code>docker pull picturium</code></li>
+            <li>Optional TOML configuration</li>
+            <li>Health, metrics, and access log out of the box</li>
+          </ul>
+        </div>
+
+        <div class="term">
+          <div class="term-tabs" role="tablist">
+            <button class="term-tab" data-tab="docker" role="tab" aria-selected="true">docker</button>
+            <button class="term-tab" data-tab="cargo" role="tab" aria-selected="false">cargo</button>
+            <button class="term-tab" data-tab="binary" role="tab" aria-selected="false">binary</button>
+            <button class="term-tab" data-tab="config" role="tab" aria-selected="false">config.toml</button>
+          </div>
+          <div class="term-body" id="tab-docker" role="tabpanel">
+            <span class="com"># pull and run, mounting ./media as the source</span><br />
+            <span class="prompt">$</span> docker run -d --name picturium \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-p <span class="arg">8080</span>:<span class="arg">8080</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-e <span class="str">PICTURIUM__SERVER__PORT=8080</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-e <span class="str">PICTURIUM__DATA__DIR=/srv/media</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-e <span class="str">PICTURIUM__CACHE__DIR=/var/cache/picturium</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-v <span class="str">$(pwd)/media</span>:<span class="str">/srv/media</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-v <span class="str">$(pwd)/cache</span>:<span class="str">/var/cache/picturium</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">ghcr.io/picturium/picturium</span>:<span class="arg">{VERSION}</span><br /><br />
+            <span class="dim">a1f3...c9  picturium-server  listening on 0.0.0.0:8080</span><br /><br />
+            <span class="prompt">$</span> curl -I <span class="str">"http://localhost:8080/sample.jpg?w=600&amp;format=webp"</span><br />
+            <span class="ok">HTTP/1.1 200 OK</span><br />
+            <span class="dim">content-type: image/webp</span><br />
+            <span class="dim">content-length: 41216</span><br />
+            <span class="dim">x-picturium-cache: MISS  · 14ms</span>
+          </div>
+          <div class="term-body" id="tab-cargo" role="tabpanel" hidden>
+            <span class="com"># requires libvips (&gt;=8.14) — `brew install vips` on macOS</span><br />
+            <span class="prompt">$</span> cargo install picturium<br /><br />
+            <span class="dim">Compiling picturium v{VERSION}</span><br />
+            <span class="dim">  Finished release [optimized] target(s) in 38.2s</span><br />
+            <span class="dim">  Installed package `picturium v{VERSION}` (executable `picturium`)</span><br /><br />
+            <span class="prompt">$</span> PICTURIUM__DATA__DIR=./media PICTURIUM__SERVER__PORT=<span class="arg">8080</span> picturium<br />
+            <span class="ok">▶</span> picturium {VERSION} — serving <span class="str">./media</span> on :8080
+          </div>
+          <div class="term-body" id="tab-binary" role="tabpanel" hidden>
+            <span class="com"># download a prebuilt binary for your platform</span><br />
+            <span class="prompt">$</span> curl -sSL https://picturium.dev/install.sh | sh<br /><br />
+            <span class="dim">picturium {VERSION} (linux-x86_64)</span><br />
+            <span class="dim">installed to /usr/local/bin/picturium</span><br /><br />
+            <span class="prompt">$</span> PICTURIUM_CONFIG=<span class="str">./config.toml</span> picturium<br />
+            <span class="ok">▶</span> picturium {VERSION}<br />
+            <span class="ok">▶</span> root  <span class="dim">./media</span><br />
+            <span class="ok">▶</span> cache <span class="dim">./cache  (LRU, 8 GB)</span><br />
+            <span class="ok">▶</span> listening on <span class="str">0.0.0.0:8080</span>
+          </div>
+          <div class="term-body" id="tab-config" role="tabpanel" hidden>
+            <span class="com"># config.toml — only include values you want to change</span><br />
+            <span class="kw">[server]</span><br />
+            host = <span class="str">"0.0.0.0"</span><br />
+            port = <span class="arg">8080</span><br /><br />
+            <span class="kw">[data]</span><br />
+            dir = <span class="str">"./media"</span><br /><br />
+            <span class="kw">[cache]</span><br />
+            dir = <span class="str">"./cache"</span><br />
+            <span class="kw">[cache.disk]</span><br />
+            limit = <span class="arg">8192</span>  <span class="com"># MiB</span><br /><br />
+            <span class="kw">[output]</span><br />
+            quality = <span class="str">"high"</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERFORMANCE -->
+    <section class="perf">
+      <div class="perf-inner">
+        <div class="perf-copy">
+          <h2 style="margin-top:14px">Fast by design.</h2>
+          <p>picturium combines <code>axum</code>, <code>libvips</code>, and asynchronous I/O in one static binary. Cached requests avoid rendering the image again.</p>
+          <div class="stack-row">
+            <span class="tag"><b>axum</b> http</span>
+            <span class="tag"><b>libvips</b> imaging</span>
+            <span class="tag"><b>tokio</b> async</span>
+            <span class="tag"><b>ravif</b> avif</span>
+            <span class="tag"><b>image-rs</b> codecs</span>
+          </div>
+        </div>
+        <div class="perf-stats">
+          {stats.map((s) => (
+            <div class="stat">
+              <span class="l">{s.label}</span>
+              <span class="v"><span class="px">{s.value}</span><span class="u">{s.unit}</span></span>
+              <span class="h">{s.hint}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+      <div class="cta-inner">
+        <h2>Stop maintaining the thumbnail pipeline.</h2>
+        <p>picturium is one binary, one optional config file, and a small set of URL parameters. Try the playground, then point it at your media folder.</p>
+        <div class="cta-ctas">
+          <a class="btn btn-primary" href="/docs">Read the docs</a>
+          <a class="btn" href={REPO} target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</Base>
+
+<script>
+  const tabs = document.querySelectorAll('.term-tab');
+  tabs.forEach((t) => {
+    t.addEventListener('click', () => {
+      tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+      document.querySelectorAll('.term-body').forEach((b) => (b.hidden = true));
+      document.getElementById('tab-' + t.dataset.tab).hidden = false;
+    });
+  });
+
+  // hero chips: whatever picturium actually returned
+  const hero = document.getElementById('hero-img');
+  const fmtBytes = (b) => (b >= 1024 * 1000 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB');
+  const heroChips = async () => {
+    const src = hero.currentSrc || hero.src;
+    const type = src.match(/f=(\w+)/)?.[1] ?? 'auto';
+    const sizeChip = document.getElementById('hero-size');
+    // naturalWidth is divided by the density srcset derived from sizes=, so it
+    // reports CSS pixels, not what picturium rendered. Show it only until the
+    // decoded bitmap below gives the real thing.
+    sizeChip.textContent = `${hero.naturalWidth} × ${hero.naturalHeight} · ${type}`;
+    // srcset means the browser picks the candidate; show the one it actually got.
+    const url = new URL(src);
+    url.searchParams.delete('cache');
+    document.getElementById('hero-url-params').textContent = `?${url.searchParams}`;
+    const e = performance.getEntriesByName(src).pop();
+    if (e) document.getElementById('hero-ms').textContent = `↻ ${Math.round(e.duration)} ms`;
+    // Resource timing zeroes body sizes cross-origin unless the server sends
+    // Timing-Allow-Origin, so measure the already-cached response instead. The
+    // same blob decodes to the true pixel dimensions.
+    const blob = await fetch(src, { cache: 'force-cache' })
+      .then((r) => r.blob())
+      .catch(() => null);
+    if (!blob) return;
+    const bitmap = await createImageBitmap(blob).catch(() => null);
+    if (bitmap) {
+      sizeChip.textContent = `${bitmap.width} × ${bitmap.height} · ${type}`;
+      bitmap.close();
+    }
+    const before = Number(hero.dataset.original);
+    if (before && blob.size) {
+      document.getElementById('hero-delta').innerHTML =
+        `${fmtBytes(before)}<span class="delta-arrow">→</span>${fmtBytes(blob.size)}` +
+        `<span class="delta-pct">−${Math.round((1 - blob.size / before) * 100)}%</span>`;
+    }
+  };
+  hero.complete ? heroChips() : hero.addEventListener('load', heroChips);
+</script>
+
+<style is:global>
+  main { display: block; }
+  section { padding: 96px 28px; }
+
+  /* ───────────────────── HERO ───────────────────── */
+  .hero {
+    position: relative;
+    padding: 52px 28px;
+    overflow: hidden;
+  }
+  .hero .bg-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* Pixel field — squares in the logo rainbow spilling leftwards from behind
+     the image stage. The <i> is one 28px square; every other pixel is a
+     box-shadow of it (see pixelField above), so this is a single DOM node. */
+  .bg-pixels > i {
+    position: absolute;
+    top: 0;
+    /* lines up with the left edge of the stage, so the densest column is the
+       one the squares appear to spill out from */
+    right: 40%;
+    width: 28px;
+    height: 28px;
+  }
+  @media (max-width: 980px) {
+    /* Same field, scaled down from its right edge and dimmed — the stage sits
+       below the copy here, so the squares hang off the right instead. */
+    .bg-pixels > i {
+      right: 4%;
+      opacity: 0.55;
+      transform: scale(0.6);
+      transform-origin: top right;
+    }
+  }
+  .hero-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(0, 1fr);
+    gap: 28px 64px;
+    align-items: start;
+    padding-top: 8px;
+  }
+  .hero-heading {
+    grid-column: 1 / -1;
+  }
+  .hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    align-items: flex-start;
+    padding-bottom: 10px;
+  }
+  .hero-h1 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(64px, 8.6vw, 112px);
+    line-height: 0.92;
+    letter-spacing: -0.055em;
+    /* pull the first glyph's left side bearing back to the optical margin */
+    text-indent: -0.04em;
+    color: var(--ink-0);
+    text-wrap: balance;
+  }
+  .hero-h1 .accent {
+    background: var(--rainbow);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero-sub {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    max-width: 39ch;
+  }
+  .hero-ctas {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .hero-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
+
+  /* hero stage — the URL → image visual */
+  .hero-stage {
+    position: relative;
+    width: min(100%, 520px);
+    justify-self: end;
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .stage-credit {
+    margin: 0;
+    padding: 8px 14px;
+    border-top: 1px solid var(--line-soft);
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .stage-credit a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--line-2); }
+  .stage-credit a:hover { color: var(--ink-0); }
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-2);
+  }
+  .stage-method {
+    flex-shrink: 0;
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--px-green);
+  }
+  .stage-head .url-bar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 12px;
+    border-left: 1px solid var(--line-2);
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--ink-2);
+    overflow: hidden;
+  }
+  .stage-head .url-bar .url-icon { flex-shrink: 0; color: var(--px-green); }
+  .stage-head .url-bar .host { color: var(--ink-3); flex-shrink: 0; }
+  .stage-head .url-bar .path { color: var(--ink-1); flex-shrink: 0; }
+  .stage-head .url-bar .params { color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .stage-body {
+    position: relative;
+    aspect-ratio: 3 / 2;
+    background: var(--bg-2);
+    overflow: hidden;
+  }
+  .stage-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform-origin: center;
+  }
+  .stage-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    align-content: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 16px;
+    background: linear-gradient(0deg, rgba(8, 9, 11, 0.5), transparent 50%);
+  }
+  .stage-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(8, 9, 11, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    font-family: var(--f-mono);
+    font-size: 11px;
+    color: var(--ink-1);
+  }
+  .stage-chip .chip-icon {
+    color: var(--px-green);
+    flex-shrink: 0;
+  }
+  .stage-chip:empty { display: none; }
+  .chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .stage-chip-delta { color: var(--ink-0); }
+  .stage-chip-delta .delta-arrow { margin: 0 6px; color: var(--ink-3); }
+  .stage-chip-delta .delta-pct {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--line-2);
+    color: var(--px-green);
+    font-weight: 600;
+  }
+
+  .ribbon {
+    height: 4px;
+    background: var(--rainbow);
+    opacity: 0.6;
+    image-rendering: pixelated;
+  }
+
+  /* ───────────────────── LOGOS BAND ───────────────────── */
+  .logos-band {
+    padding: 30px 28px;
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-1);
+  }
+  .logos-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .logos-band p {
+    margin: 0;
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .logos-row { display: flex; align-items: center; gap: 32px; flex-wrap: wrap; }
+  .logo-mark {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.7;
+    filter: grayscale(1);
+    transition: opacity 0.15s, filter 0.15s;
+  }
+  .logo-mark img { height: 26px; width: auto; max-width: 160px; object-fit: contain; display: block; }
+  .logo-mark:hover { opacity: 1; filter: grayscale(0); }
+
+  /* ───────────────────── HOW IT WORKS ───────────────────── */
+  .how {
+    padding: 110px 28px 80px;
+    border-top: 1px solid var(--line-soft);
+    position: relative;
+  }
+  .section-head {
+    max-width: 720px;
+    margin: 0 auto 56px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .section-head h2 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink-0);
+    text-wrap: balance;
+  }
+  .section-head p {
+    margin: 0;
+    font-size: 16.5px;
+    color: var(--ink-2);
+    max-width: 56ch;
+    line-height: 1.55;
+  }
+
+  .how-flow {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr 80px 1fr;
+    align-items: center;
+    gap: 0;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-xl);
+    background: var(--bg-1);
+    min-height: 220px;
+  }
+  .flow-step .num {
+    font-family: var(--f-pixel);
+    font-size: 32px;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .flow-step h3 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink-0);
+    letter-spacing: -0.01em;
+  }
+  .flow-step p { margin: 0; font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+  .flow-step .code {
+    margin-top: auto;
+    padding: 10px 12px;
+    background: var(--bg-0);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--ink-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .flow-step .code .k { color: var(--accent); }
+  .flow-step .code .v { color: var(--px-yellow); }
+  .flow-step .code .ok { color: var(--px-green); }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-4);
+  }
+  .flow-arrow svg { width: 100%; height: 20px; }
+  .flow-arrow path { stroke: url(#rainbowstroke); }
+
+  /* ───────────────────── FEATURES GRID ───────────────────── */
+  .features {
+    padding: 80px 28px 100px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .feature-grid {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+  }
+  .feature {
+    padding: 28px 24px;
+    background: var(--bg-1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    transition: background 0.18s;
+    color: inherit;
+    text-decoration: none;
+  }
+  a.feature:hover h3 { color: var(--accent); }
+  .feature:hover { background: var(--bg-2); }
+  .feature::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--rainbow);
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  .feature:hover::after { opacity: 1; }
+  .feature .icon { width: 28px; height: 28px; color: var(--accent); }
+  .feature h3 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 15.5px;
+    font-weight: 600;
+    color: var(--ink-0);
+    letter-spacing: -0.005em;
+  }
+  .feature p { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+
+  /* ───────────────────── PLAYGROUND ───────────────────── */
+  .playground {
+    padding: 110px 28px;
+    border-top: 1px solid var(--line-soft);
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 0%, rgba(216, 60, 255, 0.05), transparent 70%),
+      var(--bg-0);
+  }
+  .playground-wrap { max-width: 1240px; margin: 0 auto; }
+
+  /* ───────────────────── INSTALL ───────────────────── */
+  .install {
+    padding: 80px 28px 110px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .install-grid {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 56px;
+    align-items: center;
+  }
+  .install-copy h2 {
+    margin: 0 0 16px;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 36px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink-0);
+    text-wrap: balance;
+  }
+  .install-copy p { margin: 0 0 20px; font-size: 15.5px; color: var(--ink-2); line-height: 1.6; }
+  .install-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .install-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+  .install-list li::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    flex-shrink: 0;
+    image-rendering: pixelated;
+  }
+
+  /* terminal */
+  .term {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .term-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-2);
+    padding: 0 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .term-tabs::-webkit-scrollbar { display: none; }
+  .term-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 11px 14px;
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .term-tab:hover { color: var(--ink-1); }
+  .term-tab[aria-selected="true"] {
+    color: var(--ink-0);
+    border-bottom-color: var(--accent);
+  }
+  .term-body {
+    padding: 22px 24px;
+    font-family: var(--f-mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-1);
+    min-height: 220px;
+  }
+  .term-body[hidden] { display: none; }
+  .term-body .prompt { color: var(--px-green); user-select: none; }
+  .term-body .com { color: var(--ink-4); }
+  .term-body .arg { color: var(--accent); }
+  .term-body .str { color: var(--px-yellow); }
+  .term-body .kw  { color: var(--px-magenta); }
+  .term-body .ok  { color: var(--px-green); }
+  .term-body .dim { color: var(--ink-3); }
+
+  /* ───────────────────── PERF CALLOUT ───────────────────── */
+  .perf {
+    padding: 80px 28px 100px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-1);
+  }
+  .perf-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 64px;
+    align-items: center;
+  }
+  .perf-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+  }
+  .stat {
+    background: var(--bg-2);
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .stat .v {
+    font-family: var(--f-display);
+    font-size: 44px;
+    font-weight: 600;
+    color: var(--ink-0);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .stat .v .u { font-size: 22px; color: var(--ink-3); margin-left: 2px; }
+  .stat .v .px { font-family: var(--f-pixel); color: var(--accent); }
+  .stat .l {
+    font-size: 12.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .stat .h {
+    font-family: var(--f-display);
+    font-weight: 500;
+    font-size: 14.5px;
+    color: var(--ink-1);
+    letter-spacing: -0.005em;
+  }
+  .perf-copy h2 {
+    margin: 0 0 16px;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 36px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink-0);
+    text-wrap: balance;
+  }
+  .perf-copy p { margin: 0 0 20px; font-size: 15.5px; color: var(--ink-2); line-height: 1.6; }
+  .stack-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stack-row .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .stack-row .tag b { color: var(--ink-0); font-weight: 500; }
+
+  /* ───────────────────── CTA ───────────────────── */
+  .cta {
+    padding: 96px 28px;
+    border-top: 1px solid var(--line-soft);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta::before {
+    content: "";
+    position: absolute;
+    inset: -1px 0 auto 0;
+    height: 2px;
+    background: var(--rainbow);
+    opacity: 0.7;
+  }
+  .cta-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+  }
+  .cta h2 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 42px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink-0);
+    text-wrap: balance;
+  }
+  .cta p { margin: 0; font-size: 16.5px; color: var(--ink-2); max-width: 50ch; }
+  .cta-ctas { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+  @media (max-width: 1100px) {
+    .feature-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 980px) {
+    .hero-inner,
+    .how-flow,
+    .install-grid,
+    .perf-inner {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+    .hero-heading { grid-column: auto; }
+    .hero-copy { padding-bottom: 0; }
+    .hero-stage { width: 100%; }
+    .flow-arrow { display: none; }
+    .perf-stats { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .feature-grid { grid-template-columns: 1fr; }
+
+    section { padding: 64px 18px; }
+    .hero { padding: 48px 18px 40px; }
+    .hero-inner { padding-top: 16px; gap: 32px; }
+    .hero-h1 { font-size: clamp(48px, 15vw, 72px); line-height: 0.96; }
+    .hero-sub { font-size: 16px; }
+    .hero-ctas .btn { flex: 1 1 auto; justify-content: center; }
+    .hero-meta { flex-wrap: wrap; gap: 8px; }
+
+    .logos-band { padding: 24px 18px; }
+    .logos-row { gap: 24px; justify-content: center; }
+
+    .section-head h2 { font-size: 28px; }
+    .section-head p { font-size: 15px; }
+    .flow-step { padding: 22px 18px; min-height: 0; }
+
+    .features { padding: 64px 18px 72px; }
+    .playground { padding: 64px 18px; }
+    .install { padding: 64px 18px 72px; }
+    .perf { padding: 64px 18px 72px; }
+    .cta { padding: 72px 18px; }
+
+    .install-copy h2, .perf-copy h2 { font-size: 26px; }
+    .cta h2 { font-size: 30px; }
+    .cta p { font-size: 15px; }
+    .cta-ctas .btn { flex: 1 1 auto; justify-content: center; }
+
+    .term-body { padding: 18px 16px; font-size: 12px; overflow-x: auto; }
+    .perf-stats { grid-template-columns: 1fr; }
+    .stat { padding: 20px 18px; }
+    .stat .v { font-size: 34px; }
+  }
+</style>

@@ -1,0 +1,108 @@
+---
+title: Configuration & operations
+description: Configure picturium with config.toml or environment variables, then tune caching, concurrency, CORS, and logging.
+---
+
+import DataTable from '../../components/DataTable.astro';
+import EnvTool from '../../components/EnvTool.astro';
+import { sections, envExamples, cacheKeys, concurrencyKeys, corsLogKeys, health } from '../../data/configuration';
+
+picturium reads an optional `config.toml` file at startup, then applies any `PICTURIUM__`
+environment variables on top. This page covers the settings most useful in deployment:
+caching, concurrency, CORS, and logs. For every available key, see the
+[config key reference](/docs/config-keys). For request-facing output settings, see
+[Output format & quality](/docs/output).
+
+## Config file
+
+- At startup, picturium loads `config.toml` from the working directory, or the file selected by `PICTURIUM_CONFIG`. The file is optional because every key has a built-in default.
+- Settings are applied in this order: **built-in defaults**, **`config.toml`**, then **`PICTURIUM__` environment variables**. Each layer overrides the previous one.
+- Every key is optional. A partial file is valid; an omitted key keeps its default.
+- **Unknown keys are rejected.** A typo in the file or an environment variable stops startup and names the invalid key.
+- picturium also validates value ranges and related settings. Invalid cache sizes, quality curves, encoder effort, watermark values, and similar settings stop startup.
+- At startup, the log shows the resolved bind address, directories, cache tiers, CORS origins, signature state, libvips settings, workers, and queue size.
+- Changing any configuration value changes all cache keys and `ETag` values. Existing cached output is no longer used and is regenerated when requested.
+
+### Sections
+
+<p class="fmt">{sections.join('\n')}</p>
+
+The [config key reference](/docs/config-keys) lists every key, type, default, and
+description. The repository also includes `config.toml.example` with inline comments.
+
+### A minimal file
+
+Include only the values you want to change. All omitted values keep their defaults.
+`server.host` and `server.port` set the bind address.
+
+```toml
+# config.toml
+
+[server]
+host = "0.0.0.0"
+port = 20046
+log_level = "info"
+
+[data]
+dir = "data"
+
+[cache.disk]
+limit = 4096
+```
+
+## Environment overrides
+
+- To set a key through the environment, uppercase it, add the `PICTURIUM__` prefix, and use a **double underscore between nested levels**.
+- Environment variables override both built-in defaults and `config.toml`. Use them to change one deployment without editing the file.
+- Values are parsed, not just strings: `true` / `false` and numbers are read as written.
+- List values are comma-separated. The list-typed keys are `cors.allowed_origins`, `data.serve`, `output.format_priority` and `output.metadata`.
+- Use double underscores only between levels. Keep single underscores inside key names: `output.quality_curves.jpeg.min` becomes `PICTURIUM__OUTPUT__QUALITY_CURVES__JPEG__MIN`.
+- Unknown keys fail here too — `PICTURIUM__SERVER__PROT=8080` will not boot.
+- `PICTURIUM_CONFIG` (single underscore) is **not** a config key. It only picks which file to load.
+- The repository's `.env` file is historical and is not read by picturium; use `config.toml` or real environment variables.
+
+<EnvTool />
+
+<DataTable head={['Variable', 'Key', 'Effect']} rows={envExamples} cols={['k', 'd', '']} class="env-examples" />
+
+## Cache tuning
+
+Both cache tiers are enabled by default under `[cache]`. picturium checks memory first, then
+disk. A result that fits neither tier is returned without being cached.
+The same tiers hold generated [Office, SVG, and vector intermediates](/docs/documents).
+
+<DataTable head={['Key', 'Default', 'Notes']} rows={cacheKeys} cols={['k', 'd', '']} />
+
+- **One process per cache directory.** When disk caching is enabled, picturium locks `.picturium-cache.lock` inside `cache.dir`. A second process using the same directory cannot start, so give each instance its own directory.
+- A single disk entry is capped just under 16 MiB — foyer's block size, which is `cache.disk.limit` or 16 MiB, whichever is smaller, less a small index. Bigger renders stay in memory if they fit `cache.memory.entry_limit`, otherwise they are uncached.
+- An enabled tier needs a positive `capacity` or `limit`. Set `enabled = false` to turn a tier off. With both tiers off, picturium takes no lock, needs no cache directory, and renders every request again.
+- Worst-case RAM for the memory tier is about `capacity` times `entry_limit` (defaults: 1000 × 2 MiB ≈ 2 GiB), on top of libvips working memory per in-flight request.
+- Startup removes a legacy `intermediate` folder inside `cache.dir` if it finds one.
+- A cache read error is treated as a miss. If an insert fails, the response still succeeds, but the next request renders again.
+- There is no TTL. Entries change through eviction, `force=true` regeneration, or a configuration change that creates new keys. To clear the disk cache, stop the server and delete `cache.dir`.
+
+See [Caching & force](/docs/request-model#caching--force) for the request path, including
+the separate effects of `cache=` and `force=true`.
+
+## Concurrency & load
+
+<DataTable head={['Key', 'Default', 'Notes']} rows={concurrencyKeys} cols={['k', 'd', '']} />
+
+- A request reserves a queue slot while waiting for a worker. When a worker becomes available, the queue slot is released. The server accepts at most `workers + queue_size` active requests.
+- After that limit, new requests immediately receive **503** with `Too many requests` and `Cache-Control: no-store`.
+- Rendering uses the CPU heavily. As a starting point, keep `workers` × `vips.concurrency` near the number of CPU cores. More workers favour many requests; higher `vips.concurrency` can speed up one large image on an otherwise idle server.
+- `GET /health` returns `total_workers`, `available_workers`, `queue_size`, `available_queue_size` and a `status`. It always returns HTTP 200, so a monitor that should fail on `warning` or `unhealthy` must inspect the payload. See [Health & capacity](/docs/request-model#health--capacity).
+- The resolved worker and queue counts are printed at startup.
+
+<DataTable head={['status', 'Meaning']} rows={health} cols={['k', '']} />
+
+## CORS & logging
+
+<DataTable head={['Key', 'Default', 'Notes']} rows={corsLogKeys} cols={['k', 'd', '']} />
+
+- If only selected sites should read responses, list their CORS origins explicitly: `PICTURIUM__CORS__ALLOWED_ORIGINS=https://app.example,https://cdn.example`.
+- Logs are plain text on standard output. `debug` logs every request in detail, so use `info` or `warn` in production.
+- `RUST_LOG` takes the full `tracing` env-filter syntax and overrides `server.log_level` when set, e.g. `RUST_LOG=picturium2=info,tower_http=warn`.
+- `vips.debug` is a diagnostic switch only — leave it off in production.
+- URL signing (`security.signature_enabled`, `security.signature_secret`) is covered in
+  [Signed URLs](/docs/request-model#signed-urls).

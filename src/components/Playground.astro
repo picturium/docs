@@ -1,0 +1,374 @@
+---
+// Interactive URL-param demo, wired to the real picturium instance. Every knob
+// is an actual URL parameter; the preview is the response, and the chips read
+// the real transfer size and timing back off the resource entry.
+import { PICTURIUM } from '../consts';
+
+const samples = [
+  { id: 'skyscraper', label: 'skyscraper.jpg', by: 'Ü Lõ', href: 'https://unsplash.com/photos/skyscraper-with-illuminated-vertical-lines-C-672vHXRAg' },
+  { id: 'palms', label: 'palms.jpg', by: 'Andrés Beltrán Espinosa', href: 'https://unsplash.com/photos/lush-tropical-trees-and-palm-fronds-against-a-blue-sky-RB5gUjPWmwA' },
+  { id: 'highland-cow', label: 'highland-cow.jpg', by: 'Wilson', href: 'https://unsplash.com/photos/brown-shaggy-highland-cow-with-horns-in-a-green-pasture-q8TbJ0MKk4U' },
+  { id: 'poolside', label: 'poolside.jpg', by: 'Maverick Frame', href: 'https://unsplash.com/photos/modern-outdoor-swimming-pool-with-lounge-chairs-and-city-views-NlFpj7dZlTI' },
+  { id: 'coastal-town', label: 'coastal-town.jpg', by: 'Ahmet Yüksek', href: 'https://unsplash.com/photos/coastal-town-on-a-mountainside-overlooking-the-sea-6PJ9f66w2lw' },
+];
+
+const sliders = [
+  { section: 'Dimensions' },
+  { key: 'w', label: 'Width', min: 120, max: 1600, step: 20, unit: 'px' },
+  { key: 'h', label: 'Height', min: 120, max: 1200, step: 20, unit: 'px' },
+  { key: 'dpr', label: 'DPR', min: 1, max: 3, step: 0.5, unit: '×' },
+  { key: 'pad', label: 'Padding', min: 0, max: 120, step: 4, unit: 'px' },
+  { seg: 'fit', label: 'Fit', options: ['cover', 'contain', 'force'] },
+  { seg: 'rot', label: 'Rotate', options: ['no', '90', '180', '270'] },
+  { seg: 'g', label: 'Gravity', wide: true,
+    options: ['center', 'attention', 'entropy', 'top', 'bottom', 'left', 'right'] },
+  { section: 'Filters' },
+  { key: 'blur', label: 'Blur', min: 0, max: 20, step: 1, unit: '' },
+  { key: 'sharpen', label: 'Sharpen', min: 0, max: 10, step: 0.5, unit: '' },
+  { key: 'brightness', label: 'Brightness', min: 0.2, max: 2, step: 0.05, unit: '' },
+  { key: 'contrast', label: 'Contrast', min: 0.2, max: 2, step: 0.05, unit: '' },
+  { key: 'saturate', label: 'Saturation', min: 0, max: 2, step: 0.05, unit: '' },
+  { key: 'hue', label: 'Hue', min: 0, max: 360, step: 5, unit: '°', spectrum: true },
+  { key: 'grayscale', label: 'Grayscale', min: 0, max: 1, step: 0.05, unit: '' },
+  { key: 'sepia', label: 'Sepia', min: 0, max: 1, step: 0.05, unit: '' },
+  { key: 'invert', label: 'Invert', min: 0, max: 1, step: 0.05, unit: '' },
+  { key: 'pixelate', label: 'Pixelate', min: 1, max: 40, step: 1, unit: '' },
+  { section: 'Output' },
+  { seg: 'f', label: 'Format', wide: true, options: ['auto', 'webp', 'avif', 'jpg', 'png'] },
+  { key: 'q', label: 'Quality', wide: true, min: 1, max: 100, step: 1, unit: '' },
+];
+
+const defaults = {
+  src: 'coastal-town', w: 900, h: 600, dpr: 1, pad: 0, fit: 'cover', rot: 'no', g: 'center',
+  blur: 0, sharpen: 0, brightness: 1, contrast: 1, saturate: 1, hue: 0,
+  grayscale: 0, sepia: 0, invert: 0, pixelate: 1,
+  f: 'webp', q: 82,
+};
+---
+<div class="pg-wrap" id="pg" data-base={PICTURIUM} data-samples={JSON.stringify(samples)} data-defaults={JSON.stringify(defaults)}>
+  <div class="pg-left">
+    <div class="pg-url">
+      <svg class="url-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+      <span class="url">
+        <span class="h" id="pg-host"></span><span class="p" id="pg-path"></span><span class="qm" id="pg-qm">?</span><span class="q" id="pg-params"></span>
+      </span>
+      <button class="copy" id="pg-copy">copy</button>
+    </div>
+    <div class="pg-stage">
+      <div class="pg-frame" id="pg-frame">
+        <img id="pg-img" alt="" />
+        <div class="pg-chips">
+          <span class="pg-chip"><svg class="chip-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg><span id="pg-chip-out"></span></span>
+          <span class="pg-chip" id="pg-chip-ms"></span>
+        </div>
+      </div>
+    </div>
+    <p class="pg-credit">Photo by <a id="pg-credit" href="#" target="_blank" rel="noopener noreferrer"></a> on <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer">Unsplash</a></p>
+  </div>
+
+  <div class="pg-right">
+    <div class="pg-field span2">
+      <select class="pg-select" data-key="src">
+        {samples.map((s) => <option value={s.id}>{s.label}</option>)}
+      </select>
+    </div>
+
+    {sliders.map((f) => f.section ? (
+      <div class="pg-section span2">{f.section}</div>
+    ) : f.seg ? (
+      <div class:list={['pg-field', f.wide && 'span2']}>
+        <div class="pg-label"><span>{f.label}</span></div>
+        <div class="pg-seg" data-key={f.seg}>
+          {f.options.map((o) => <button type="button" value={o} aria-pressed={defaults[f.seg] === o}>{o}</button>)}
+        </div>
+      </div>
+    ) : (
+      <div class:list={['pg-field', f.wide && 'span2']}>
+        <div class="pg-label"><span>{f.label}</span><span class="v" data-value-for={f.key}>{defaults[f.key]}{f.unit}</span></div>
+        <input class:list={['pg-slider', f.spectrum && 'hue']} type="range" data-key={f.key} data-unit={f.unit}
+               min={f.min} max={f.max} step={f.step} value={defaults[f.key]} />
+      </div>
+    ))}
+
+    <button class="pg-reset" id="pg-reset">Reset</button>
+  </div>
+</div>
+
+<script>
+  const root = document.getElementById('pg');
+  const base = root.dataset.base;
+  const samples = JSON.parse(root.dataset.samples);
+  const defaults = JSON.parse(root.dataset.defaults);
+  const state = { ...defaults };
+
+  const el = (id) => document.getElementById(id);
+  const img = el('pg-img');
+
+  const fmtBytes = (b) =>
+    b < 1024 ? b + ' B'
+    : b < 1024 * 1024 ? (b / 1024).toFixed(b < 10240 ? 1 : 0) + ' KB'
+    : (b / (1024 * 1024)).toFixed(2) + ' MB';
+
+  const sample = () => samples.find((x) => x.id === state.src) ?? samples[0];
+  const path = () => `/samples/${sample().label}`;
+
+  function query() {
+    const p = [['w', state.w], ['h', state.h]];
+    if (state.dpr !== 1) p.push(['dpr', state.dpr]);
+    if (state.pad > 0) p.push(['pad', state.pad]);
+    if (state.fit !== 'cover') p.push(['fit', state.fit]);
+    if (state.rot !== 'no') p.push(['rot', state.rot]);
+    if (state.g !== 'center') p.push(['g', state.g]);
+    const filter = [
+      state.blur > 0 && `blur:${state.blur}`,
+      state.sharpen > 0 && `sharpen:${state.sharpen}`,
+      state.brightness !== 1 && `brightness:${state.brightness}`,
+      state.contrast !== 1 && `contrast:${state.contrast}`,
+      state.saturate !== 1 && `saturate:${state.saturate}`,
+      state.hue > 0 && `hue:${state.hue}`,
+      state.grayscale > 0 && `grayscale:${state.grayscale}`,
+      state.sepia > 0 && `sepia:${state.sepia}`,
+      state.invert > 0 && `invert:${state.invert}`,
+      state.pixelate > 1 && `pixelate:${state.pixelate}`,
+    ].filter(Boolean).join('|');
+    if (filter) p.push(['filter', filter]);
+    p.push(['watermark', 'image:picturium.webp|opacity:70|anchor:top-right|scale:0.18']);
+    if (state.f !== 'auto') p.push(['f', state.f]);
+    // always sent: picturium's own default is q=medium, not 82
+    p.push(['q', state.q]);
+    return p.map(([k, v]) => `${k}=${v}`).join('&');
+  }
+
+  const url = (q = query()) => `${base}${path()}${q ? '?' + q : ''}`;
+
+  // Fetched rather than set straight on the img: Resource Timing zeroes
+  // encodedBodySize cross-origin without Timing-Allow-Origin, and the blob
+  // gives the exact byte count and the format picturium actually chose.
+  async function load(src, id) {
+    const t0 = performance.now();
+    let res;
+    try {
+      res = await fetch(src);
+    } catch {
+      if (id === nonce) el('pg-chip-ms').textContent = 'network error';
+      return;
+    }
+    const ms = Math.round(performance.now() - t0);
+    if (id !== nonce) return; // a newer request already went out
+    if (!res.ok) {
+      el('pg-chip-out').textContent = `HTTP ${res.status}`;
+      el('pg-chip-ms').textContent = '';
+      return;
+    }
+    const blob = await res.blob();
+    if (id !== nonce) return;
+    const old = img.src;
+    img.onload = () => {
+      el('pg-chip-out').textContent =
+        `${img.naturalWidth} × ${img.naturalHeight} · ${blob.type.replace('image/', '')} · ${fmtBytes(blob.size)}`;
+      if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+    };
+    img.src = URL.createObjectURL(blob);
+    el('pg-chip-ms').textContent = `↻ ${ms} ms`;
+  }
+
+  let timer;
+  let nonce = 0;
+  function render() {
+    const q = query();
+    el('pg-host').textContent = new URL(base).host;
+    el('pg-path').textContent = path();
+    el('pg-params').textContent = q;
+    el('pg-qm').hidden = !q;
+    const credit = el('pg-credit');
+    credit.textContent = sample().by;
+    credit.href = sample().href;
+
+    // debounced: a slider drag would otherwise fire a request per pixel
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      // cache= busts the browser cache only (picturium ignores it for its own
+      // key), so the timing chip shows a real fetch instead of a memory hit.
+      // Kept out of the displayed URL and the copy button on purpose.
+      load(url([q, `cache=${++nonce}`].filter(Boolean).join('&')), nonce);
+    }, 250);
+  }
+
+  function set(key, value) {
+    state[key] = value;
+    const label = root.querySelector(`[data-value-for="${key}"]`);
+    const input = root.querySelector(`input[data-key="${key}"]`);
+    if (label && input) label.textContent = value + input.dataset.unit;
+    render();
+  }
+
+  root.querySelectorAll('input[data-key]').forEach((input) => {
+    input.addEventListener('input', () => set(input.dataset.key, Number(input.value)));
+  });
+  root.querySelector('select[data-key]').addEventListener('change', (e) => set('src', e.target.value));
+  root.querySelectorAll('.pg-seg').forEach((seg) => {
+    seg.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+      set(seg.dataset.key, btn.value);
+    });
+  });
+
+  el('pg-reset').addEventListener('click', () => {
+    Object.assign(state, defaults);
+    root.querySelectorAll('input[data-key]').forEach((input) => {
+      input.value = defaults[input.dataset.key];
+      root.querySelector(`[data-value-for="${input.dataset.key}"]`).textContent =
+        defaults[input.dataset.key] + input.dataset.unit;
+    });
+    root.querySelector('select[data-key]').value = defaults.src;
+    root.querySelectorAll('.pg-seg').forEach((seg) => {
+      seg.querySelectorAll('button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.value === defaults[seg.dataset.key])));
+    });
+    render();
+  });
+
+  const copy = el('pg-copy');
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(new URL(url(), location.href).href);
+    } catch {}
+    copy.textContent = 'copied';
+    copy.classList.add('ok');
+    setTimeout(() => { copy.textContent = 'copy'; copy.classList.remove('ok'); }, 1100);
+  });
+
+  render();
+</script>
+
+<style>
+.pg-wrap{
+  display:grid;grid-template-columns:1.7fr 1fr;gap:24px;
+  background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-2xl);
+  overflow:hidden;
+}
+.pg-left{position:relative;min-width:0;display:flex;flex-direction:column;background:var(--bg-0);border-right:1px solid var(--line-soft);}
+.pg-url{
+  display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line-soft);
+  background:var(--bg-2);font-family:var(--f-mono);font-size:12.5px;color:var(--ink-1);
+  overflow:hidden;white-space:nowrap;
+}
+.pg-url .url-icon{color:var(--px-green);flex-shrink:0;}
+.pg-url .url{flex:1;overflow:hidden;text-overflow:ellipsis;}
+.pg-url .url .h{color:var(--ink-3);}
+.pg-url .url .p{color:var(--ink-1);}
+.pg-url .url .q{color:var(--accent);}
+.pg-url .url .qm{color:var(--ink-3);}
+.pg-url .copy{
+  padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg-3);
+  color:var(--ink-2);font:inherit;font-size:11px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+  transition:color .15s,border-color .15s;
+}
+.pg-url .copy:hover{color:var(--ink-0);border-color:var(--line-2);}
+.pg-url .copy.ok{color:var(--px-green);border-color:var(--px-green);}
+
+.pg-stage{
+  flex:1;position:relative;
+  background:
+    repeating-conic-gradient(rgba(255,255,255,.025) 0% 25%, transparent 0% 50%) 0 0/24px 24px,
+    var(--bg-0);
+  display:flex;align-items:center;justify-content:center;padding:20px;min-height:560px;
+}
+.pg-frame{
+  position:relative;background:var(--bg-2);border:1px solid var(--line);
+  box-shadow:0 30px 80px -30px rgba(0,0,0,.6);overflow:hidden;max-width:100%;
+}
+.pg-frame img{display:block;max-width:100%;max-height:600px;width:auto;height:auto;}
+.pg-chips{
+  position:absolute;left:0;right:0;bottom:0;padding:10px 12px;
+  display:flex;justify-content:space-between;gap:8px;pointer-events:none;
+}
+.pg-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;
+  background:rgba(8,9,11,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid var(--line);font-family:var(--f-mono);font-size:10.5px;color:var(--ink-1);
+}
+.pg-chip .chip-icon{color:var(--accent);flex-shrink:0;}
+.pg-credit{
+  margin:0;padding:8px 16px;border-top:1px solid var(--line-soft);
+  font-size:11px;color:var(--ink-3);
+}
+.pg-credit a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--line-2);}
+.pg-credit a:hover{color:var(--ink-0);}
+
+.pg-right{
+  display:grid;grid-template-columns:1fr 1fr;align-content:start;
+  min-width:0;padding:18px;gap:2px 14px;
+}
+.pg-right .span2{grid-column:1 / -1;}
+.pg-section{
+  font-family:var(--f-mono);font-size:10.5px;color:var(--ink-3);
+  letter-spacing:.08em;text-transform:uppercase;padding:14px 4px 4px;
+  border-top:1px solid var(--line-soft);
+}
+.pg-section:first-child{border-top:0;padding-top:4px;}
+.pg-field{display:flex;flex-direction:column;gap:6px;padding:6px 4px;}
+.pg-label{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:12.5px;color:var(--ink-1);font-weight:500;
+}
+.pg-label .v{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-2);}
+.pg-slider{
+  appearance:none;-webkit-appearance:none;width:100%;height:3px;
+  background:var(--bg-3);border-radius:999px;outline:none;
+}
+.pg-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--ink-0);border:0;box-shadow:0 0 0 1px var(--line),0 2px 6px rgba(0,0,0,.4);cursor:pointer;
+}
+.pg-slider::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--ink-0);border:0;
+  box-shadow:0 0 0 1px var(--line),0 2px 6px rgba(0,0,0,.4);cursor:pointer;
+}
+/* real hue wheel, so 0-360 on the track lines up with the rotation in degrees */
+.pg-slider.hue{
+  background:linear-gradient(90deg,
+    hsl(0 90% 55%),hsl(60 90% 55%),hsl(120 90% 55%),hsl(180 90% 55%),
+    hsl(240 90% 55%),hsl(300 90% 55%),hsl(360 90% 55%));
+}
+
+.pg-seg{
+  display:flex;flex-wrap:wrap;background:var(--bg-3);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;
+}
+.pg-seg button{
+  flex:1;padding:6px 8px;border:0;background:transparent;color:var(--ink-2);
+  font:inherit;font-size:11.5px;border-radius:6px;cursor:pointer;
+  transition:background .15s,color .15s;letter-spacing:.01em;
+}
+.pg-seg button:hover{color:var(--ink-0);}
+.pg-seg button[aria-pressed="true"]{background:var(--bg-1);color:var(--ink-0);box-shadow:0 0 0 1px var(--line);}
+
+.pg-select{
+  width:100%;padding:7px 28px 7px 10px;border-radius:8px;background:var(--bg-3);
+  border:1px solid var(--line);color:var(--ink-1);font:inherit;font-size:12.5px;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(180,188,200,.7)' d='M0 0h10L5 6z'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;cursor:pointer;
+}
+.pg-reset{
+  grid-column:1 / -1;margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--line);background:transparent;
+  color:var(--ink-2);font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;transition:color .15s,border-color .15s;
+}
+.pg-reset:hover{color:var(--ink-0);border-color:var(--line-2);}
+
+@media (max-width: 900px) {
+  .pg-wrap{grid-template-columns:1fr;}
+  .pg-left{border-right:0;border-bottom:1px solid var(--line-soft);}
+  .pg-right{grid-template-columns:1fr 1fr;}
+}
+@media (max-width: 600px) {
+  .pg-stage{padding:16px;min-height:0;}
+  .pg-url{padding:10px 12px;gap:8px;font-size:11.5px;}
+  .pg-right{padding:14px;}
+  .pg-seg button{flex:1 1 auto;min-width:64px;}
+  .pg-chips{flex-wrap:wrap;padding:8px;}
+}
+</style>

@@ -1,0 +1,31 @@
+<figure class="request-flow" aria-labelledby="request-flow-title">
+  <figcaption id="request-flow-title">Request flow</figcaption>
+  <ol>
+    <li>GET URL</li>
+    <li>Verify signature</li>
+    <li>Resolve source<br />or fallback</li>
+    <li>Parse effective<br />parameters</li>
+    <li>Check validators<br />and server cache</li>
+    <li>Acquire worker<br />and render</li>
+    <li>HTTP response</li>
+  </ol>
+  <p><code>original=true</code> serves the resolved source unchanged; a matching validator returns <code>304</code> before rendering.</p>
+</figure>
+
+<style>
+  .request-flow { container-type: inline-size; margin: 2rem 0; }
+  figcaption { margin-bottom: .65rem; color: var(--ink-0); font-family: var(--f-display); font-weight: 600; }
+  ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .45rem; margin: 0; padding: 0; list-style: none; }
+  li { position: relative; min-width: 0; padding: .8rem .65rem; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--bg-2); color: var(--ink-1); font: 600 .76rem/1.35 var(--f-mono); text-align: center; }
+  li:not(:last-child)::after { content: '→'; position: absolute; z-index: 1; top: 50%; right: -.6rem; transform: translateY(-50%); color: var(--px-cyan); font: 1rem var(--f-mono); }
+  li:nth-child(2) { border-color: var(--px-magenta); }
+  li:nth-child(5) { border-color: var(--px-yellow); }
+  li:nth-child(6) { border-color: var(--px-green); }
+  p { margin: .7rem 0 0; color: var(--ink-2); font-size: .9rem; }
+
+  @container (max-width: 58rem) {
+    ol { grid-template-columns: 1fr; justify-items: center; gap: 1.25rem; }
+    li { width: max-content; max-width: 100%; }
+    li:not(:last-child)::after { content: '↓'; top: auto; right: auto; bottom: -.95rem; left: 50%; transform: translateX(-50%); }
+  }
+</style>

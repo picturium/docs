@@ -1,0 +1,29 @@
+<figure class="transform-flow" aria-labelledby="transform-flow-title">
+  <figcaption id="transform-flow-title">Raster transform order</figcaption>
+  <ol>
+    <li>Autorotate<br />/ rotate</li>
+    <li>Crop</li>
+    <li>Size × DPR<br />× scale</li>
+    <li>Fit<br />/ gravity</li>
+    <li>Pad</li>
+    <li>Filters</li>
+    <li>Watermark</li>
+  </ol>
+</figure>
+
+<style>
+  .transform-flow { container-type: inline-size; margin: 2rem 0; }
+  figcaption { margin-bottom: .65rem; color: var(--ink-0); font-family: var(--f-display); font-weight: 600; }
+  ol { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .45rem; margin: 0; padding: 0; list-style: none; }
+  li { position: relative; min-width: 0; padding: .8rem .45rem; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--bg-2); color: var(--ink-1); font: 600 .72rem/1.35 var(--f-mono); text-align: center; }
+  li:not(:last-child)::after { content: '→'; position: absolute; z-index: 1; top: 50%; right: -.6rem; transform: translateY(-50%); color: var(--px-cyan); font: 1rem var(--f-mono); }
+  li:nth-child(2) { border-color: var(--px-magenta); }
+  li:nth-child(6) { border-color: var(--px-yellow); }
+  li:nth-child(7) { border-color: var(--px-green); }
+
+  @container (max-width: 58rem) {
+    ol { grid-template-columns: 1fr; justify-items: center; gap: 1.25rem; }
+    li { width: max-content; max-width: 100%; padding-inline: .8rem; }
+    li:not(:last-child)::after { content: '↓'; top: auto; right: auto; bottom: -.95rem; left: 50%; transform: translateX(-50%); }
+  }
+</style>

@@ -1,0 +1,258 @@
+---
+title: PHP library
+description: Generate signed picturium URLs, responsive srcsets, and img or picture markup from PHP 8.4 applications.
+---
+
+import DataTable from '../../components/DataTable.astro';
+
+The official PHP client generates signed URLs, `srcset` values, and complete
+`<img>` or `<picture>` elements. It is framework-independent, has no runtime
+dependencies, and requires PHP 8.4 or newer.
+
+```bash
+composer require lamka02sk/picturium
+```
+
+The client only produces strings and arrays; it does not send image requests. Use it
+from plain PHP or templates such as Blade, Twig, and Latte.
+
+## Configure
+
+Register the server during application bootstrap. The secret must match
+`security.signature_secret`; omit it when [signed URLs](/docs/request-model#signed-urls)
+are disabled.
+
+```php
+use Picturium\Enum\Format;
+use Picturium\Picturium;
+use function Picturium\img;
+
+Picturium::configure(
+    url: 'https://img.example.com',
+    secret: $_ENV['PICTURIUM_SECRET'],
+    defaults: img()->dpr([1, 2, 3])->quality(80)->format(Format::Auto),
+);
+```
+
+`defaults` is an optional `Image` prototype copied to every image and picture. Setters
+return clones, so derived images do not change it.
+
+Register named servers or inject a normal object when needed:
+
+```php
+Picturium::configure(url: 'https://cdn.example.com', secret: '...', name: 'cdn');
+
+img('a.jpg')->src();              // default server
+img('a.jpg', 'cdn')->src();       // named server
+img('a.jpg')->on('cdn')->src();   // switch while retaining parameters
+
+$picturium = new Picturium('https://img.example.com', $secret);
+$picturium->image('a.jpg')->width(400)->src();
+```
+
+## Images and output layers
+
+Import the namespaced helpers; they cannot collide with global application functions.
+
+```php
+use function Picturium\{img, picture};
+
+$image = img('photos/cat.jpg')->width(400)->aspectRatio('4/3');
+
+$image->src();          // one URL
+$image->srcset();       // comma-separated DPR candidates
+$image->urls();         // ['1x' => '...', '2x' => '...']
+$image->attributes();   // raw attribute array
+$image->attrs();        // escaped attribute string
+$image->toHtml();       // complete <img> element
+```
+
+Casting renders the complete element. Call `src()` when already inside a `src`
+attribute; otherwise the whole `<img>` would be inserted there.
+
+```php
+<?= img($product->photo)->width(400)->alt($product->name)->lazy() ?>
+<img <?= img($product->photo)->width(400)->attrs() ?> alt="<?= $product->name ?>">
+<img src="<?= img('a.jpg')->width(400)->src() ?>">
+```
+
+`attributes()` is unescaped for framework bridges. `attrs()` and `toHtml()` escape HTML.
+Intrinsic `width` and `height` appear only when both are known, or one can be derived
+from an aspect ratio. They are CSS pixels and are not multiplied by DPR.
+
+Bare global helpers are opt-in; namespaced imports are preferred:
+
+```php
+require 'vendor/lamka02sk/picturium/src/globals.php';
+```
+
+## Responsive images
+
+A DPR list generates `x` descriptors. The CSS width stays fixed while picturium
+multiplies the render size by each `dpr` value.
+
+```php
+img('a.jpg')->width(400)->dpr([1, 2])->srcset();
+// ...?dpr=1&w=400... 1x, ...?dpr=2&w=400... 2x
+```
+
+The client does not guess layout-dependent `w` descriptors. Use a picture for different
+breakpoint sizes, crops, or formats:
+
+```php
+use Picturium\Enum\Format;
+
+echo picture('hero.jpg')
+    ->quality(80)->dpr([1, 2])
+    ->images(fn ($image) => [
+        $image->minWidth(1024)->width(1920)->height(1080),
+        $image->maxWidth(640)->portrait()->width(640)->aspectRatio('1/1'),
+        $image->format(Format::Avif)->width(1200),
+    ])
+    ->alt('Hero');
+```
+
+Picture parameters are shared by every `<source>` and the fallback `<img>`. The closure
+receives an independent `Image`; it runs when output is produced and may run more than
+once, so keep it free of side effects. Sources retain array order, and the browser uses
+the first matching `media` and `type`.
+
+<DataTable head={['Method', 'Media condition']} cols={['k', 'd']} rows={[
+  ['minWidth / maxWidth', 'Minimum or maximum viewport width'],
+  ['minHeight / maxHeight', 'Minimum or maximum viewport height'],
+  ['portrait / landscape', 'Viewport orientation'],
+  ['highContrast', 'prefers-contrast: more'],
+  ['media', 'Any custom media query'],
+]} />
+
+Conditions accumulate with `and`. A pinned format adds its MIME `type`; negotiated or
+`Format::Auto` output has no single type and omits the attribute. `bare()` drops shared
+picture parameters while retaining instance defaults and media conditions; pass it a
+path to use another file. `sources()` returns unrendered source data and `image()` the
+fallback image.
+
+## Transformation builder
+
+Every picturium URL parameter has a typed setter. Enums cover fixed value sets.
+
+```php
+use Picturium\Enum\{
+    Anchor, Extend, Fit, Format, Gravity, Metadata, Quality, Resample, Rotate
+};
+
+img('a.jpg')
+    ->width(800)->height(600)->aspectRatio('16/9')->dpr([1, 2])
+    ->fit(Fit::Contain)->gravity(Gravity::Attention)->extend(Extend::Mirror)
+    ->resample(Resample::Lanczos3)->upsize()->scale(1.5)->padding(10, 20)
+    ->rotate(Rotate::Left)->autoRotate(false)->background('ff0000')
+    ->quality(Quality::High)->format(Format::Webp)
+    ->metadata(Metadata::Icc, Metadata::Exif)
+    ->dpi(300)->style('svg { fill: red; }')->limit(width: 2000, size: '1.5M')
+    ->pages(1, '3-5')->time('00:01:30')->download('cat.jpg')
+    ->original()->force()->cache($version)->fallback('placeholder.jpg');
+```
+
+<DataTable head={['Family', 'Methods']} cols={['k', 'd']} rows={[
+  ['Builder and HTML', 'file · on · mutable · attribute · alt · lazy'],
+  ['Size', 'width · height · aspectRatio · dpr · scale · upsize · fit · gravity · extend · resample · padding · limit'],
+  ['Orientation and colour', 'autoRotate · rotate · background'],
+  ['Output', 'quality · format · dpi · metadata · style · original · download · cache · force · fallback'],
+  ['Documents and video', 'pages · time'],
+  ['Grouped parameters', 'crop · filter · watermark · animate'],
+]} />
+
+For server behavior and limits, see [Sizing & constraints](/docs/sizing),
+[Cropping & gravity](/docs/cropping), [Filters](/docs/filters),
+[Watermarking](/docs/watermarking), [Output format & quality](/docs/output),
+[Animation & video](/docs/animation), and [Documents & vectors](/docs/documents).
+
+### Grouped parameters
+
+Grouped methods use named arguments, and repeated calls merge supplied fields.
+
+```php
+img('a.jpg')
+    ->crop(width: 800, height: 600, gravity: Gravity::Attention, x: 10, y: 20)
+    ->filter(blur: 4, sharpen: 2.0, saturate: 1.2,
+        palette: ['black', 'white', 0.8])
+    ->watermark(text: 'ACME', anchor: Anchor::BottomRight,
+        opacity: 40, padding: [10, 20])
+    ->animate(frames: 36, fps: 12.0, loop: 0);
+
+img('a.jpg')->disableWatermark();
+img('a.jpg')->disableAnimation();
+```
+
+`animate()` accepts `frames`, `timing`, `fps`, `loop`, and `stride`; `timing` and `fps`
+are mutually exclusive. The disabling methods override server-configured behavior.
+
+### Short aliases
+
+Aliases delegate to the long methods, preserving types and validation.
+
+<DataTable head={['Long methods', 'Aliases']} cols={['', 'k']} rows={[
+  ['width · height · aspectRatio · gravity', 'w · h · ar · g'],
+  ['quality · format · background · rotate', 'q · f · bg · rot'],
+  ['padding · metadata · time · pages', 'pad · meta · t · page'],
+  ['animate · autoRotate · limit', 'anim · autorot · limits'],
+]} />
+
+### Enum values
+
+<DataTable head={['Enum', 'Cases']} cols={['k', 'd']} rows={[
+  ['AspectRatio', 'Auto · Video · Square; fractions such as 4/3 also work'],
+  ['Fit', 'Cover · Contain · Force'],
+  ['Gravity', 'Top · Right · Bottom · Left · TopLeft · TopRight · BottomLeft · BottomRight · Center · Attention · Entropy'],
+  ['Extend', 'Background · Copy · Repeat · Mirror'],
+  ['Resample', 'Nearest · Linear · Cubic · Lanczos2 · Lanczos3'],
+  ['Rotate', 'None · Left · UpsideDown · Right'],
+  ['Quality', 'Auto · Low · Medium · High · Maximum; integers 1–100 also work'],
+  ['Format', 'Auto · Jpeg · Png · Gif · Webp · Avif · Jxl · Pdf · Svg'],
+  ['Metadata', 'None · Icc · Exif · Xmp · Iptc · Other · Gainmap · All'],
+  ['Anchor', 'Center · Repeat · Top · Right · Bottom · Left · TopLeft · TopRight · BottomLeft · BottomRight'],
+]} />
+
+Colours accept a CSS name, bare 3, 4, 6, or 8 digit hex without `#`, or a supported
+CSS colour function. `style()` base64-encodes raw CSS for the server.
+
+## Validation and immutability
+
+Invalid numeric ranges and cross-parameter rules throw
+`Picturium\Exception\InvalidParameter` while building, before a broken URL reaches a
+template. The server remains authoritative for files and configuration-dependent limits.
+
+```php
+$base = img('hero.jpg')->quality(80);
+$mobile = $base->width(400);
+$desktop = $base->width(1600); // $base is unchanged
+```
+
+`mutable()` switches one builder to in-place updates. Use it only after measuring a real
+benefit; signing usually costs more than cloning this small state.
+
+## Signing and caching
+
+Path segments and query values are percent-encoded. Parameters and grouped
+sub-parameters are sorted before HMAC-SHA256 signing, producing a stable URL regardless
+of setter order. Signed URLs do not expire; rotating the secret invalidates them.
+
+- `cache($version)` changes the browser or CDN URL, not picturium's generated cache key.
+- `force()` bypasses generated caches and validators, returns `no-store`, and replaces generated cache entries.
+
+See [Caching & force](/docs/request-model#caching--force) for the complete behavior.
+With `image.upsize=false`, a high-DPR candidate can be smaller than promised when its
+source is too small. Output width and height limits apply after DPR multiplication.
+
+## API summary
+
+<DataTable head={['Type', 'Main API']} cols={['k', 'd']} rows={[
+  ['Picturium', '__construct · configure · instance · configured · image · picture'],
+  ['Image URLs', 'url · src · urls · srcset'],
+  ['Image HTML', 'attributes · attrs · toHtml · string cast'],
+  ['Picture', 'images · sources · image · toHtml · string cast'],
+  ['Builder state', 'file · on · mutable · attribute · alt · lazy'],
+]} />
+
+The package source and issue tracker are on
+[GitHub](https://github.com/lamka02sk/picturium-php-client). For raw parameter names and
+status codes, use the [Quick reference](/docs/reference).

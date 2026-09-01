@@ -1,0 +1,179 @@
+---
+title: Output format & quality
+description: Choose the response format, tune quality and metadata, cap output dimensions or bytes, and control downloads.
+---
+
+import DataTable from '../../components/DataTable.astro';
+import { curveCols, curves } from '../../data/config-keys';
+
+Use `f` / `format` to choose the response format and `q` / `quality` to balance
+detail against file size. picturium applies these after [sizing](/docs/sizing),
+[cropping](/docs/cropping), [filters](/docs/filters), and
+[watermarking](/docs/watermarking).
+
+```text
+/photo.png?w=1200&f=avif&q=high
+/photo.png?w=1200&f=auto&q=72&meta=icc
+```
+
+## Format selection
+
+Set `f` explicitly when the output must be predictable:
+
+<DataTable
+  head={['Value', 'Content-Type', 'Notes']}
+  cols={['k', 'd', '']}
+  rows={[
+    ['jpg · jpeg', 'image/jpeg', 'Still image. Transparency is flattened onto bg.'],
+    ['webp', 'image/webp', 'Still or animated image.'],
+    ['png', 'image/png', 'Still image; quality can select palette or lossless encoding.'],
+    ['gif', 'image/gif', 'Still or animated palette image.'],
+    ['avif', 'image/avif', 'Still image.'],
+    ['jxl', 'image/jxl', 'Still image.'],
+    ['pdf', 'application/pdf', 'Document response from PDF, Office, SVG, or vector input.'],
+    ['svg', 'image/svg+xml', 'Document response from SVG or vector input.'],
+  ]}
+/>
+
+`f=pdf` and `f=svg` return a document rather than a raster encode. Sizing, filters,
+quality, metadata, and raster output limits do not apply to those responses. An
+unsupported source/format pairing returns `415`. See [Documents & vectors](/docs/documents)
+for accepted sources, page selection, conversion, and SVG safety controls.
+
+Only WebP and GIF can carry multiple frames. JPEG, PNG, AVIF, and JXL flatten an
+animated source to its first selected frame. See [Animation & video](/docs/animation)
+for frame, timing, loop, and video extraction controls.
+
+### Automatic selection
+
+`f=auto` checks `output.format_priority` from left to right and uses the first media
+type found in the request's `Accept` header. The default priority is:
+
+```text
+jxl → avif → webp → jpeg → png
+```
+
+If no configured entry matches, or there is no readable `Accept` header, picturium
+falls back to WebP. GIF is absent from the default list and is therefore never selected
+automatically. Automatic responses include `Vary: Accept`; explicit formats do not.
+
+The current matcher looks for literal media types such as `image/avif`. It does not
+interpret wildcard ranges or quality weights, so send explicit image media types when
+using `f=auto`.
+
+The `output.enable_avif`, `output.enable_webp`, and `output.enable_jxl` settings are
+currently reserved: the running pipeline does not use them to gate explicit or automatic
+format selection.
+
+## Quality
+
+`q` accepts `low`, `medium`, `high`, `maximum`, `auto`, or an integer from `1` to `100`.
+The default is `output.quality`, which is `medium`.
+
+- A number is passed directly to the selected encoder.
+- `auto` and `medium` use the format's size-aware curve without an offset.
+- `low`, `high`, and `maximum` add the corresponding per-format offset, then clamp the
+  result to `1–100`.
+
+For named quality, picturium measures the final image or one document/animation page.
+Images at or below `0.25 MP` use the curve's `max`; images at or above `8 MP` use its
+`min`; sizes between those bounds are interpolated.
+
+<DataTable head={['format', ...curveCols]} rows={curves} cols={['k', 'd', 'd', 'd', 'd', 'd']} />
+
+The `min_area`, `max_area`, and every curve value are configurable under
+`output.quality_curves`. JXL still exposes the common `1–100` scale; its encoder converts
+that value to distance. PNG switches to its lossless branch at quality `100` by default,
+while lower qualities use a palette. GIF spends quality on palette depth, dithering,
+and animation error thresholds rather than a codec quality value.
+
+```text
+/hero.jpg?f=webp&q=medium
+/icon.png?f=png&q=100
+/gallery/photo.jpg?f=jxl&q=78
+```
+
+## Encoder options
+
+Encoder settings are server-wide configuration, not URL parameters. Higher effort
+usually trades more CPU time for a smaller file.
+
+<DataTable
+  head={['Format', 'Main controls', 'Default effort']}
+  cols={['k', '', 'd']}
+  rows={[
+    ['jpeg', 'optimised Huffman coding', '—'],
+    ['webp', 'presets by image area, alpha quality, smart subsampling, animation keyframes', '2 (0–6)'],
+    ['png', 'palette threshold, compression, dithering', '2 (1–10)'],
+    ['avif', 'bit depth, codec, encoder implementation, chroma subsampling', '1 (0–9)'],
+    ['jxl', 'decode-speed tier, lossless mode, distance conversion', '3 (1–9)'],
+    ['gif', 'palette depth, dithering, interframe and interpalette error', '7 (1–10)'],
+  ]}
+/>
+
+See the [`output.encoder` config reference](/docs/config-keys#outputencoder) for every
+key, accepted range, and default. The `output.high_bitdepth` and `output.cmyk` settings
+are currently reserved and are not read by the raster encoder pipeline.
+
+## Metadata
+
+`meta` / `metadata` chooses which source metadata blocks the raster encoder keeps.
+Separate several values with commas:
+
+<p class="fmt">none · icc · exif · xmp · iptc · other · gainmap · all</p>
+
+```text
+/photo.jpg?f=jpeg&meta=icc,exif
+/photo.jpg?f=webp&meta=none
+```
+
+The default comes from `output.metadata` and is `none`. `all` keeps every supported
+category. Metadata support also depends on the selected encoder; document and original
+responses bypass this setting.
+
+## Output limits
+
+Use grouped `limit` / `limits` values to cap dimensions, bytes, or both:
+
+```text
+/photo.jpg?limit=dimension:1200
+/photo.jpg?limit=dimension:1200x800|size:500K
+/photo.jpg?limit=dimension:x800|size:1.5MiB
+```
+
+<DataTable
+  head={['Key', 'Value', 'Behaviour']}
+  cols={['k', '', '']}
+  rows={[
+    ['dimension', 'N · WxH · Wx · xH', 'Scales the result down proportionally to fit the supplied width and/or height.'],
+    ['size', 'bytes · K/KB/KiB · M/MB/MiB · G/GB/GiB', 'Re-encodes at lower quality when the first raster encode is too large. Units are binary.'],
+  ]}
+/>
+
+Request limits override the matching `output.max_width`, `output.max_height`, and
+`output.max_size` defaults. A missing dimension axis can still inherit its configured
+limit; set the corresponding config value to `0` for no server-wide ceiling.
+
+For a byte limit, picturium makes at most `output.max_size_attempts` retries and never
+probes below `output.max_size_min_quality`. It accepts a result within
+`output.max_size_threshold` percent below the target. If the target cannot be reached,
+the smallest attempted result is returned even when it is still too large.
+
+## Delivery: download & original
+
+Add `download` to set `Content-Disposition: attachment`. With an empty value, picturium
+uses the source stem and resolved output extension; with a value, it uses that filename.
+
+```text
+/photo.png?f=webp&download
+/photo.png?f=webp&download=homepage-image.webp
+```
+
+The filename does not select or override `f`; `f` and `Content-Type` still determine the
+actual output bytes. Unsafe or non-ASCII filename characters are replaced with `_`.
+
+`original=true` returns the source file unchanged. It bypasses format negotiation,
+sizing, crop, filters, [watermarking](/docs/watermarking), quality, metadata selection, and output limits.
+`download` can still attach the original response.
+
+For the compact list of aliases and defaults, see the [URL parameter reference](/docs/reference).

@@ -1,0 +1,104 @@
+---
+title: Config key reference
+description: Look up every picturium config.toml key, including its type, default value, and purpose.
+crumbs:
+  - label: Configuration & operations
+    href: /docs/configuration
+monoHeadings: true
+---
+
+import DataTable from '../../components/DataTable.astro';
+import { rows, curveCols, curves, encoderRows } from '../../data/config-keys';
+
+export const keyTable = (id) => <DataTable head={['Key', 'Type / values', 'Default', 'What it does']} rows={rows(id)} cols={['k', '', 'd', '']} />
+
+Look up every key in `config.toml`, including its type, default, and purpose. Every key is
+optional, and you can run picturium without a config file. The
+[Configuration & operations](/docs/configuration) page explains loading, cache sizing,
+concurrency, CORS, and logs. Request-time signing, validators, cache busting, and capacity
+are covered in the [Request model](/docs/request-model).
+
+- To use an environment variable, uppercase the key, add the `PICTURIUM__` prefix, and put `__` between levels. For example, `output.encoder.avif.bitdepth` becomes `PICTURIUM__OUTPUT__ENCODER__AVIF__BITDEPTH`. Environment variables override the file.
+- List values (`cors.allowed_origins`, `data.serve`, `output.format_priority`, `output.metadata`) are comma-separated in an environment variable.
+- picturium validates values at startup. An out-of-range value or unknown key prevents the server from starting.
+- The repository includes `config.toml.example` with the same defaults and inline comments.
+
+## [server]
+{keyTable('server')}
+
+## [security]
+{keyTable('security')}
+
+## [cors]
+{keyTable('cors')}
+
+## [vips]
+{keyTable('vips')}
+
+## [data]
+{keyTable('data')}
+
+## [cache]
+Both cache tiers are enabled by default. picturium checks memory first, then disk. A result that fits neither is returned without being cached.
+{keyTable('cache')}
+
+## [svg]
+{keyTable('svg')}
+
+## [pdf]
+{keyTable('pdf')}
+
+## [office]
+{keyTable('office')}
+
+## [vector]
+{keyTable('vector')}
+
+## [video]
+See [Animation & video](/docs/animation#video-frames--clips) for request syntax and how
+these defaults affect still-frame and clip extraction.
+{keyTable('video')}
+
+## [image]
+Default sizing and layout values. Each value can be overridden by the matching URL parameter.
+See [Cropping](/docs/cropping) for how `image.crop_gravity` controls the grouped `crop=` parameter.
+{keyTable('image')}
+
+## [watermark]
+Defaults for watermarks when `enabled` is true. Each key can be overridden with `watermark=…`, and `watermark=false` disables the mark for one request. An image takes priority over text.
+See [Watermarking](/docs/watermarking) for request syntax, source precedence, placement,
+and complete configuration examples.
+{keyTable('watermark')}
+
+## [output]
+See [Output format & quality](/docs/output) for how these defaults affect a request.
+{keyTable('output')}
+
+## [output.quality_curves]
+
+Each format has a quality curve based on image size. Images at or below `max_area` use
+`max` quality; images at or above `min_area` use `min` quality. Sizes between them are
+interpolated. The requested `q` level then shifts that value; `medium` and `auto` do not
+apply an offset. All formats, including JXL, use the shared 1–100 scale here. `low`,
+`high`, and `maximum` are offsets from −100 to 100.
+
+<DataTable
+  head={['Key', 'Type', 'Default', 'What it does']}
+  cols={['k', '', 'd', '']}
+  rows={[
+    ['min_area', 'megapixels', '8.0', "At or above this area, quality bottoms out at each curve's min."],
+    ['max_area', 'megapixels', '0.25', "At or below this area, quality tops out at each curve's max. Must be above 0 and below min_area."],
+  ]}
+/>
+
+Per-format curves — `output.quality_curves.<format>.<key>`:
+
+<DataTable head={['format', ...curveCols]} rows={curves} cols={['k', 'd', 'd', 'd', 'd', 'd']} />
+
+## [output.encoder]
+
+Encoder settings live under `output.encoder.<format>` for `jpeg`, `webp`, `png`, `avif`,
+`jxl`, and `gif`. Each codec has its own `effort` scale; higher values usually encode more
+slowly and produce smaller files.
+
+<DataTable head={['Key', 'Type / values', 'Default', 'What it does']} rows={encoderRows} cols={['k', '', 'd', '']} />
