@@ -6,14 +6,14 @@ description: Build and sign request URLs, understand server and HTTP caches, han
 import DataTable from '../../components/DataTable.astro';
 import RequestFlow from '../../components/RequestFlow.astro';
 
-Every transformation is a `GET` request. The path chooses a source beneath `data.dir`;
-the query string describes the result. picturium verifies the URL, resolves the source,
-parses the parameters, checks validators and generated caches, then either serves or
-renders the response.
+Every transformation is a plain `GET` request. The path picks a source file under
+`data.dir`, and the query string describes what you want back. picturium checks the
+signature, finds the file, parses the parameters, looks at validators and its caches, and
+then either serves a cached result or renders a new one.
 
 <RequestFlow />
 
-The compact list of every parameter and alias is in the
+If you just need the list of parameters and aliases, head to the
 [Quick reference](/docs/reference#url-parameters).
 
 ## URL grammar
@@ -22,34 +22,35 @@ The compact list of every parameter and alias is in the
 GET /<path-under-data.dir>?<name>=<value>&<name>=<value>
 ```
 
-For example, with `data.dir = "data"`, this request reads
-`data/catalog/chair.jpg`:
+With `data.dir = "data"`, this request reads `data/catalog/chair.jpg`:
 
 ```text
 /catalog/chair.jpg?w=1200&h=800&fit=cover&f=webp&q=high
 ```
 
-- The URL never includes `data.dir`. picturium canonicalises the source and refuses a
-  path that escapes the data directory.
-- Parameter names and aliases are case-sensitive: `w` and `width` work; `W` does not.
-  Named enum values are case-insensitive, so `fit=Contain` and `fit=contain` match.
-- Most common parameters have a short alias, such as `w` / `width`, `h` / `height`,
-  `f` / `format`, and `q` / `quality`.
-- Grouped parameters join case-sensitive `key:value` parts with `|`, for example
-  `crop=w:400|h:300|g:attention`.
-- URL-encode user-provided paths, filenames, watermark text, and other free-form values.
-  Their `&`, `=`, `|`, `#`, and percent-encoding must not be allowed to change the query.
-- Unknown top-level parameters are ignored. Invalid values for known typed parameters
-  are rejected with `400`, so use the [parameter index](/docs/reference#url-parameters)
-  to catch spelling mistakes.
+A few rules worth knowing:
 
-Transform order and parameter-specific rules live with [Sizing & layout](/docs/sizing),
+- `data.dir` itself never appears in the URL. picturium resolves the real path and
+  refuses anything that ends up outside the data directory.
+- Parameter names are case-sensitive: `w` and `width` work, `W` doesn't. Named values
+  aren't, so `fit=Contain` and `fit=contain` mean the same thing.
+- The common parameters have short aliases: `w` / `width`, `h` / `height`,
+  `f` / `format`, `q` / `quality`, and so on.
+- Grouped parameters join case-sensitive `key:value` pairs with `|`, like
+  `crop=w:400|h:300|g:attention`.
+- URL-encode anything user-supplied: paths, filenames, watermark text. Otherwise a stray
+  `&`, `=`, `|` or `#` can change the meaning of the query.
+- Unknown parameters are silently ignored, but a bad value for a known one returns `400`.
+  If a parameter seems to do nothing, check its spelling against the
+  [parameter index](/docs/reference#url-parameters).
+
+The rules for individual transforms live on their own pages: [Sizing & layout](/docs/sizing),
 [Cropping](/docs/cropping), [Filters & effects](/docs/filters),
 [Watermarking](/docs/watermarking), and [Output format & quality](/docs/output).
 
 ## Signed URLs
 
-URL signing is off by default. Enable it only with a strong secret:
+Signing is off by default. If you turn it on, use a long random secret:
 
 ```toml
 [security]
@@ -57,9 +58,9 @@ signature_enabled = true
 signature_secret = "replace-with-a-long-random-secret"
 ```
 
-When enabled, every file request needs a lowercase `token` query parameter containing a
-hex-encoded HMAC-SHA256 digest. The signed payload is the path without its leading slash,
-followed by `?` and the exact raw query string with every `token=` pair removed:
+With signing on, every file request needs a `token` query parameter holding a
+hex-encoded HMAC-SHA256 digest. You sign the path without its leading slash, then `?`,
+then the raw query string exactly as it will be sent, minus the `token=` pair:
 
 ```text
 payload = "catalog/chair.jpg?w=1200&f=webp"
@@ -68,135 +69,169 @@ token   = hex(HMAC-SHA256(signature_secret, payload))
 /catalog/chair.jpg?w=1200&f=webp&token=<token>
 ```
 
-Preserve query order, repeated fields, separators, and percent-encoding between signing
-and sending. If `token` is the only query parameter, the payload still ends in `?`.
-The token itself is not part of the payload.
+When the URL has no other parameters, sign just the path, with no trailing `?`:
 
-A missing, non-hex, or mismatched token returns `403 Invalid signature` with
-`Cache-Control: no-store`. The root page, `/public/*`, and `/health` are separate routes
-and are not signature-protected. Keep the secret server-side; never place it in browser
-code. Generate a value with `openssl rand -hex 48`, and see the
-[`[security]` config reference](/docs/config-keys#security) for the environment-variable
-names.
+```text
+payload = "catalog/chair.jpg"
+
+/catalog/chair.jpg?token=<token>
+```
+
+The server checks the query string byte for byte, so keep the parameter order, repeated
+parameters and percent-encoding identical between signing and sending.
+
+A missing, malformed or wrong token gets `403 Invalid signature` with
+`Cache-Control: no-store`. The home page, `/public/*` and `/health` are separate routes
+and don't need a signature. Keep the secret on the server and never ship it to the
+browser. `openssl rand -hex 48` makes a good one; the environment variable names are in the
+[`[security]` config reference](/docs/config-keys#security).
 
 ## Caching & force
 
-picturium has two distinct cache layers:
+There are two separate caches to think about:
 
-1. The browser or CDN caches the HTTP URL according to `cache.cache_control`.
-2. picturium caches generated responses and conversion intermediates in its configured
-   memory and disk tiers.
+1. Browsers and CDNs cache the HTTP response by URL, following `cache.cache_control`.
+2. picturium keeps rendered responses and conversion intermediates in its own memory and
+   disk cache.
 
-The server key is derived from the picturium version and resolved configuration, source
-path, source modification time and size, effective parameters, and resolved output
-format. It is not the literal request URL. Normal concurrent misses for the same key are
-coalesced into one render.
+picturium's cache key isn't the URL. It's built from the picturium version and
+configuration, the source path, the source file's modification time and size, the
+effective parameters, and the resolved output format. So reordering parameters still hits
+the cache. If several requests miss the same key at once, only one of them renders and
+the rest wait for its result.
 
-Use the two cache-busting parameters for different jobs:
+The two cache-busting parameters do different jobs:
 
 <DataTable
   head={['Parameter', 'Browser / CDN', 'picturium server cache']}
   cols={['k', '', '']}
   rows={[
-    ['cache=<value>', 'Changes the URL, so it can create a new client or CDN entry.', 'Ignored when deriving the server key; the cached render and ETag stay the same.'],
-    ['force=true', 'Returns Cache-Control: no-store and does not return 304.', 'Skips reads, regenerates generated output and intermediates, then replaces their cache entries.'],
+    ['cache=<value>', 'Changes the URL, so browsers and CDNs treat it as a new resource.', 'Ignored. The cached render and its ETag stay the same.'],
+    ['force=true', 'Sends Cache-Control: no-store and never answers with 304.', 'Skips the cache, renders again (intermediates included), and replaces the cached entries.'],
   ]}
 />
 
-`force=true` does not change the ETag because `force` is not part of the effective
-parameters. For an unchanged raw or `original=true` response there is no generated entry
-to replace; force only bypasses conditional validation and returns `no-store`.
+`force` isn't part of the cache key, so the ETag doesn't change. For raw files and
+`original=true` there's nothing generated to replace; `force` just skips the conditional
+checks and adds `no-store`.
 
-Cache capacities, eviction, entry-size limits, and clearing the disk cache are covered in
-[Configuration & operations](/docs/configuration#cache-tuning). Document conversion cache
-behaviour is covered in [Documents & vectors](/docs/documents).
+Cache sizes, eviction and clearing the disk cache are covered in
+[Configuration & operations](/docs/configuration#cache-tuning). How document conversions
+are cached is explained in [Documents & vectors](/docs/documents).
 
 ## HTTP caching
 
-Successful responses normally use `cache.cache_control`, which defaults to:
+Successful responses use `cache.cache_control`, which defaults to:
 
 ```text
 public, max-age=604800, must-revalidate
 ```
 
-Generated responses include an `ETag` derived from the server cache key and a
-`Last-Modified` value from the source file. Send either validator on the next request:
+Rendered responses carry an `ETag` derived from the server cache key and a
+`Last-Modified` taken from the source file. Send either one back on the next request:
 
 ```http
 If-None-Match: "6bc3a2a6683f12d4"
 If-Modified-Since: Sat, 29 Aug 2026 12:00:00 GMT
 ```
 
-If `If-None-Match` is present, it takes precedence over `If-Modified-Since`. A matching
-ETag, an `If-None-Match: *`, or an unchanged source date returns `304` with an empty body.
+If both are present, `If-None-Match` wins. A matching ETag, `If-None-Match: *`, or a
+source that hasn't changed since the given date gets a `304` with an empty body.
 `force=true` skips these checks.
 
-Responses negotiated with `f=auto` include `Vary: Accept`; explicit formats do not.
-Raw gzipped SVG responses use `Vary: Accept-Encoding`. See
-[automatic format selection](/docs/output#automatic-selection) for the accepted media
-types.
+Responses where the format came from `f=auto` include `Vary: Accept`; responses with an
+explicit format don't. Gzipped SVGs served as-is use `Vary: Accept-Encoding`. The
+[automatic format selection](/docs/output#automatic-selection) section explains which
+media types are recognised.
 
 ## Errors & fallback
 
-`fallback` is another source path beneath `data.dir`, not a remote URL. It is tried only
-when the requested source cannot be resolved:
+`fallback` is another path under `data.dir`, not a remote URL. picturium tries it when
+the requested file can't be found, or when a PDF exceeds one of the
+[PDF limits](/docs/documents#limits) (`pdf.max_file_size`, `pdf.max_pages`,
+`pdf.max_image_pixels`):
 
 ```text
 /catalog/missing.jpg?w=800&fallback=placeholders/product.jpg
 ```
 
-The fallback goes through the same path-safety checks and then receives the original
-request's transforms. It is not retried after a decode, conversion, rendering, or
-encoding failure. Use it for known missing files, not as a general error handler.
+The fallback goes through the same path checks and gets the same transforms as the
+original request. Apart from the PDF limits, it isn't used when decoding, conversion,
+rendering or encoding fails, so treat it as a placeholder for missing or oversized files
+rather than a catch-all error handler.
 
 <DataTable
   head={['Status', 'Meaning']}
   cols={['k', '']}
   rows={[
-    ['400', 'A known parameter has an invalid value, or a valid page selection resolves to no document page.'],
-    ['403', 'URL signing is enabled and token is missing or invalid.'],
-    ['404', 'The source cannot be resolved and no usable fallback was supplied.'],
-    ['415', 'The source type is unsupported and not allowlisted, or the requested PDF / SVG output cannot be produced.'],
-    ['500', 'Processing, conversion, or encoding failed.'],
-    ['503', 'Every worker and queue slot is occupied.'],
+    ['400', 'A known parameter has an invalid value, or a page selection matches no page in the document or is larger than pdf.max_pages.'],
+    ['403', 'URL signing is on and the token is missing or wrong.'],
+    ['404', 'The source file doesn\'t exist and no usable fallback was given.'],
+    ['415', 'The file type can\'t be processed and isn\'t allowlisted, or the requested PDF / SVG output can\'t be produced from this source.'],
+    ['500', 'Processing, conversion or encoding failed.'],
+    ['503', 'All workers are busy and the queue is full.'],
   ]}
 />
 
-Handler-generated `403`, `404`, `415`, `500`, and `503` responses use
-`Cache-Control: no-store`. `original=true` is different from fallback: it requires the
-requested source to exist, then serves it unchanged. See
-[delivery and original responses](/docs/output#delivery-download--original).
+The `403`, `404`, `415`, `500` and `503` responses all use `Cache-Control: no-store`.
+Don't confuse `original=true` with fallback: it needs the requested file to exist and
+returns it untouched. See [delivery and original responses](/docs/output#delivery-download--original).
 
 ## Health & capacity
 
-`GET /health` returns the live worker and queue counters without requiring a signature:
+`GET /health` doesn't need a signature. Out of the box it only tells you the status:
+
+```json
+{ "status": "healthy" }
+```
+
+Set `security.health_token` and send it as `Authorization: Bearer <token>` or
+`/health?token=<token>` to get the version, live worker and queue counters, and memory
+statistics as well. A wrong token returns `401`. If you send both, the header wins. Use
+the header when you can: a token in the URL ends up in access logs and in picturium's own
+debug log.
 
 ```json
 {
-  "name": "picturium",
-  "version": "2.0.0",
   "status": "healthy",
+  "name": "picturium",
+  "version": "0.2.0",
   "total_workers": 8,
   "available_workers": 6,
   "queue_size": 100,
-  "available_queue_size": 100
+  "available_queue_size": 100,
+  "memory": {
+    "rss_bytes": 412000256,
+    "peak_rss_bytes": 530579456,
+    "vips_bytes": 52428800,
+    "vips_peak_bytes": 104857600,
+    "vips_allocations": 120,
+    "vips_open_files": 3,
+    "vips_cached_operations": 100,
+    "cache_bytes": 201326592,
+    "cache_capacity_bytes": 268435456
+  }
 }
 ```
 
-`server.workers = 0` resolves to twice the available CPU count. Each transformation holds
-one worker permit. A request may wait in one of `server.queue_size` queue slots; once all
-workers and slots are occupied, new requests immediately receive `503 Too many requests`.
+`rss_bytes` is what the operating system reports for the whole process. The `vips_*`
+fields only cover memory libvips tracks itself, and `cache_*` describes the in-memory
+response cache.
+
+`server.workers = 0` means twice the number of CPUs. Each render holds one worker. Extra
+requests wait in one of `server.queue_size` queue slots, and once every worker and slot is
+taken, new requests get `503 Too many requests` straight away.
 
 <DataTable
   head={['status', 'Condition']}
   cols={['k', '']}
   rows={[
-    ['healthy', 'The default while capacity remains.'],
-    ['warning', 'Available queue slots are below 10% of total_workers.'],
-    ['unhealthy', 'Both available_workers and available_queue_size are zero.'],
+    ['healthy', 'There\'s spare capacity.'],
+    ['warning', 'Free queue slots have dropped below 10% of total_workers.'],
+    ['unhealthy', 'available_workers and available_queue_size are both zero.'],
   ]}
 />
 
-The health route currently returns HTTP `200` for all three values, so a monitor must
-inspect the JSON `status` when warning or unhealthy should fail a check. Tune the limits
-with [Configuration & operations](/docs/configuration#concurrency--load).
+The endpoint answers with HTTP `200` in all three cases, so if you want a monitor to fail
+on `warning` or `unhealthy`, have it read the `status` field. Tuning the limits is covered
+in [Configuration & operations](/docs/configuration#concurrency--load).

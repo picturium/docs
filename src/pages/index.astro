@@ -13,7 +13,8 @@ const heroPath = '/samples/skyscraper.jpg';
 // to match .stage-body — cropping in CSS would throw away the bytes the chip is
 // bragging about saving.
 const heroSizes = '(max-width: 980px) calc(100vw - 56px), 520px';
-const heroParamsFor = (w: number) => `w=${w}&h=${Math.round(w / 1.5)}&fit=cover&f=webp&q=82`;
+const heroParamsFor = (w: number) =>
+  `w=${w}&h=${Math.round(w / 1.5)}&fit=cover&f=webp&q=82&watermark=${encodeURIComponent('image:picturium.png|opacity:70|anchor:top-right|scale:0.06')}`;
 // cache= busts the browser/CDN copy per build (per request in dev), so the chip
 // times a real fetch. Stripped again before the URL bar renders it.
 const heroCacheBust = `cache=${Date.now()}`;
@@ -30,103 +31,174 @@ const heroCredit = {
 
 // Pixel field behind the hero: 28px squares in the logo rainbow, spilling out
 // from behind the left edge of the image stage and thinning out to the left.
-// Deterministic (seeded) so the build is reproducible; one div, many shadows.
+// Deterministic (seeded) so the build is reproducible. The shadows are dealt
+// into a few divs so each group can twinkle on its own clock.
+const hues = ['255, 58, 58', '255, 138, 31', '255, 214, 51', '51, 224, 102', '43, 212, 240', '58, 120, 255', '216, 60, 255'];
+const seeded = (seed: number) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const pixelField = (() => {
-  const hues = ['255, 58, 58', '255, 138, 31', '255, 214, 51', '51, 224, 102', '43, 212, 240', '58, 120, 255', '216, 60, 255'];
-  const cell = 28, cols = 26, rows = 27;
-  let seed = 0x9e3779b9;
-  const rand = () => (((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296));
-  const shadows: string[] = [];
+  const cell = 28, cols = 26, rows = 27, groups = 5;
+  const rand = seeded(0x9e3779b9);
+  const shadows: string[][] = Array.from({ length: groups }, () => []);
   for (let c = 0; c < cols; c++) {
     // Density and alpha both fall off with distance from the stage.
     const near = 1 - c / cols;
     for (let r = 0; r < rows; r++) {
       if (rand() > near * 0.55) continue;
       const alpha = (0.10 + rand() * 0.30) * near;
-      shadows.push(`${-c * cell}px ${r * cell}px 0 rgba(${hues[(c + r) % hues.length]}, ${alpha.toFixed(3)})`);
+      // group from position, not rand(), so the field itself stays the same
+      shadows[(c * 7 + r * 3) % groups].push(`${-c * cell}px ${r * cell}px 0 rgba(${hues[(c + r) % hues.length]}, ${alpha.toFixed(3)})`);
     }
   }
-  return shadows.join(', ');
+  return shadows.map((g) => g.join(', '));
+})();
+// A few squares that hop out of the stage along the grid, one cell per step.
+const pixelRunners = (() => {
+  const rand = seeded(0x2545f491);
+  return Array.from({ length: 8 }, (_, i) => {
+    const n = 6 + Math.floor(rand() * 10);
+    return `--r:${Math.floor(rand() * 24)};--n:${n};--h:${hues[i % hues.length]};--t:${(n * 0.32 + 3 + rand() * 4).toFixed(2)}s;--dl:${(-rand() * 9).toFixed(2)}s`;
+  });
+})();
+// Mosaic over the hero image: cells clear in a diagonal sweep from the top
+// left corner. Cells are square (12×8 on 3:2), so c + r is a true 45° front.
+const stageCells = (() => {
+  const rand = seeded(0x68e31da4);
+  const cols = 12, rows = 8;
+  return Array.from({ length: cols * rows }, (_, k) => {
+    const c = k % cols, r = Math.floor(k / cols);
+    return `--h:${hues[(c + r) % hues.length]};--d:${Math.round(((c + r) / (cols + rows - 2)) * 720 + rand() * 90)}`;
+  });
 })();
 
 const features = [
   {
     title: 'Resize & crop',
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 13l5-5 4 4 4-4 5 5"/>',
-    body: 'Set <code>w</code> and <code>h</code>, choose a fit mode, and keep the most important part of the image in view.',
+    body: 'Set <code>w</code> and <code>h</code>, pick a fit mode, or let attention gravity find the subject before it crops.',
     href: '/docs/sizing',
   },
   {
-    title: 'Rotate & flip',
+    title: 'Rotate & orient',
     icon: '<path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 3v6h6"/>',
-    body: 'Rotate by any angle or a 90° step, flip horizontally or vertically, and apply EXIF orientation automatically.',
+    body: 'Phone photos come out the right way up, thanks to EXIF. Turn anything else in 90° steps.',
     href: '/docs/sizing',
   },
   {
     title: 'Filters & effects',
     icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/>',
-    body: 'Combine blur, sharpen, brightness, contrast, saturation, grayscale, hue rotation, and invert in one URL.',
+    body: 'Blur, sharpen, pixelate, tone, sepia, duotone. Chain them with <code>|</code> in a single <code>filter</code> parameter.',
     href: '/docs/filters',
   },
   {
     title: 'Format conversion',
     icon: '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/><path d="M8 11l4 4 4-4"/><path d="M12 4v11"/>',
-    body: 'Return WebP, AVIF, JPEG, or PNG. Automatic mode uses the client\'s <code>Accept</code> header and falls back safely.',
+    body: '<code>f=auto</code> picks the best format each browser accepts: JPEG XL, AVIF, WebP, JPEG, PNG or GIF.',
     href: '/docs/output',
   },
   {
     title: 'Quality control',
     icon: '<path d="M3 6l9 4 9-4-9-4-9 4z"/><path d="M3 12l9 4 9-4"/><path d="M3 18l9 4 9-4"/>',
-    body: 'Set <code>q=1..100</code> per request, use format-aware defaults, or keep PNG and WebP output lossless.',
+    body: '<code>q=high</code> adapts to image size and format. Cap output by pixels or bytes so nothing ships too heavy.',
     href: '/docs/output',
   },
   {
-    title: 'Written in Rust',
-    icon: '<path d="M13 2L3 14h7v8l10-12h-7z"/>',
-    body: 'Built with <code>axum</code> and <code>libvips</code> and shipped as a single static binary.',
+    title: 'Watermarks',
+    icon: '<path d="M12 2.7l5.7 5.7a8 8 0 1 1-11.4 0z"/>',
+    body: 'Stamp a logo or text in any corner, or tile it across the image. Set a default once, server-wide.',
+    href: '/docs/watermarking',
   },
   {
-    title: 'On-disk cache',
+    title: 'Memory & disk cache',
     icon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12l8.73-5.04"/><path d="M12 22V12"/>',
-    body: 'The URL is the cache key. Repeated requests can return the cached result without rendering it again.',
+    body: 'Results live in memory and on disk. Repeat requests never touch libvips.',
     href: '/docs/request-model',
   },
   {
     title: 'Files, not just images',
     icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
-    body: 'Allow selected non-image files to pass through unchanged, with the correct MIME type and byte-range support.',
+    body: 'Render pages from PDFs, Office files and vector art, grab frames from video, and pass other files through untouched.',
     href: '/docs/documents',
   },
 ];
 
-const stats = [
-  { label: 'Cold transform · p50', value: '11', unit: 'ms', hint: '1920×1080 jpg → 600w webp' },
-  { label: 'Warm cache · p50', value: '0.7', unit: 'ms', hint: 'straight off the disk cache' },
-  { label: 'Throughput', value: '14.2', unit: 'k/s', hint: 'requests per second, c=64' },
-  { label: 'Binary size', value: '9.4', unit: 'MB', hint: 'single static executable' },
+const faqs = [
+  {
+    q: 'What is picturium?',
+    a: 'An HTTP server that transforms media on the fly. The path picks a file from your media folder, and the query string says what to do with it: resize, crop, filter, convert, compress. picturium renders it once with <code>libvips</code> and serves every later request from cache, so there is no thumbnail pipeline to build or maintain.',
+    href: '/docs',
+  },
+  {
+    q: 'How is it different from Cloudinary, imgproxy, or Thumbor?',
+    a: 'It runs on your own hardware, so there is no per-image or per-transform pricing. It also reads far more than photos: HEIC, JXL, PSD, camera RAW, SVG, PDF, Office files and video frames all go through the same URL. And it comes with an official PHP library for signed URLs and responsive markup.',
+    href: '/docs/php-library',
+  },
+  {
+    q: 'Do I need to run my own server?',
+    a: 'Yes, picturium is self-hosted. Run the one-line installer (or <code>docker run</code> the image yourself), point it at your media, and you\'re done. There is no hosted plan, and nothing phones home.',
+    href: '/#install',
+  },
+  {
+    q: 'What image and file formats can it read?',
+    a: 'Almost anything visual. Photos: JPEG, PNG, TIFF, WebP, GIF, HEIF/HEIC/AVIF, JXL, JPEG 2000, BMP, ICO and camera RAW. Design files: PSD, SVG, EPS, AI, CorelDRAW and DXF. Plus PDF, Office documents and video. It writes JPEG, WebP, PNG, GIF, AVIF and JXL, and can also return PDF and SVG.',
+    href: '/docs/reference#input',
+  },
+  {
+    q: 'Is it really free?',
+    a: 'Yes. picturium is MIT licensed and free for any use, commercial included. The source is on GitHub.',
+    href: REPO,
+  },
+  {
+    q: 'How do I stop people abusing the resize endpoint?',
+    a: 'Turn on URL signing. With a secret set, every request needs an HMAC-SHA256 <code>token</code>, so picturium only serves URLs your application generated. Output limits (<code>output.max_width</code>, <code>max_height</code>, <code>max_size</code>) cap what a single response can cost. And when every worker and queue slot is busy, it answers <code>503 Too many requests</code> instead of falling over.',
+    href: '/docs/request-model#signed-urls',
+  },
+  {
+    q: 'How does caching work?',
+    a: 'Rendered images are kept in memory and on disk. The cache key is the source file, the effective parameters and the output format, not the literal URL, so reordered parameters still hit the cache. Responses also carry <code>Cache-Control</code> (one week by default) and an <code>ETag</code>, so browsers and any CDN in front of picturium cache them too.',
+    href: '/docs/request-model#caching--force',
+  },
 ];
+
+// Keep these verifiable: counts come from picturium2/src/process/source.rs,
+// the SSIM figures from picturium2/bench/results.md.
+// bench/results.md in the picturium repo: cold renders (caches off), 4 CPUs, 50 requests at concurrency 4, q=80.
+// hit: repeat request served from cache, measured by hand (1–2 ms, larger outputs at the top end)
+const bench = [
+  { label: 'webp 1920×1080', hit: 2, pic: [567.9, 791.9], imp: [692.1, 895.3] },
+  { label: 'webp 800×600 with alpha', hit: 1, pic: [130.0, 148.3], imp: [197.0, 247.7] },
+  { label: 'webp 1600×1200 from 36 MPix', hit: 2, pic: [603.8, 780.8], imp: [712.6, 1297.6] },
+  { label: 'webp from a GIF still', hit: 1, pic: [43.5, 57.1], imp: [71.3, 108.4] },
+  { label: 'jpeg 1920×1080', hit: 2, pic: [217.5, 295.5], imp: [213.7, 342.0] },
+];
+const benchMax = Math.max(...bench.flatMap((r) => [r.pic[0], r.imp[0]]));
+const ms = (v: number) => `${Math.round(v)} ms`;
 ---
 <Base
-  title="picturium — images, on request"
+  title="picturium — URL-driven image server written in Rust"
   description="The path chooses the source. The query string describes the result. picturium renders, caches, and serves the image you asked for."
 >
-  <main>
+  <main id="main">
     <!-- HERO -->
     <section class="hero">
-      <div class="bg-layer bg-pixels" aria-hidden="true"><i style={`box-shadow:${pixelField}`}></i></div>
+      <div class="bg-layer bg-pixels" aria-hidden="true">
+        <div class="px-field">
+          {pixelField.map((g, i) => <i style={`box-shadow:${g};--g:${i}`}></i>)}
+          {pixelRunners.map((st) => <b style={st}></b>)}
+        </div>
+      </div>
 
       <div class="hero-inner">
         <div class="hero-heading">
           <h1 class="hero-h1">
-              Perfect image, <span class="accent" >everytime.</span>
+              Picture perfect, <span class="accent" >every time.</span>
           </h1>
         </div>
 
         <div class="hero-copy">
           <p class="hero-sub">
-              Picturium is an ultrafast media processing server that resizes, converts,
-              and caches <em style="font-family: var(--f-display)">(not just)</em> your images on the fly -
-              so your users get pixel-perfect assets at the speed of light.
+              picturium is a fast, self-hosted media server that resizes, converts
+              and caches <em style="font-family: var(--f-display)">(not just)</em> your images on the fly,
+              so every visitor gets exactly the file their screen needs.
           </p>
           <div class="hero-ctas">
             <a class="btn btn-primary" href="/docs">Get started</a>
@@ -144,6 +216,12 @@ const stats = [
             <span class="dot"></span>
             <span>Docker-ready</span>
           </div>
+
+          <p class="hero-run-hook">One command and you are ready to go:</p>
+          <div class="hero-run">
+            <code id="hero-run-cmd">curl -fsSL https://picturium.cc/install.sh | sh</code>
+            <button type="button" class="hero-run-copy" data-copy="#hero-run-cmd" aria-label="Copy command">copy</button>
+          </div>
         </div>
 
         <!-- right column: URL → image stage -->
@@ -153,7 +231,7 @@ const stats = [
             <div class="url-bar">
               <svg class="url-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
               <span class="host">{new URL(PICTURIUM).host}</span>
-              <span class="path">{heroPath}</span><span class="params" id="hero-url-params">?{heroParamsFor(1040)}</span>
+              <span class="path">{heroPath}</span><span class="params" id="hero-url-params">?{decodeURIComponent(heroParamsFor(1040))}</span>
             </div>
           </div>
           <div class="stage-body">
@@ -168,6 +246,22 @@ const stats = [
               alt=""
               data-original={heroOriginalBytes}
             />
+            <div class="stage-reveal" aria-hidden="true">{stageCells.map((st) => <i style={st}></i>)}</div>
+            <script is:inline>
+              // Inline so the cells cover the image before its first paint, cached or not.
+              // Plays on load, or on error so a failed fetch never stays hidden.
+              (() => {
+                if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+                const stage = document.currentScript.parentElement;
+                const img = stage.querySelector('img');
+                stage.classList.add('armed');
+                // two frames so the covered state paints before the transition starts
+                const done = () => requestAnimationFrame(() => requestAnimationFrame(() => stage.classList.add('is-in')));
+                if (img.complete) return done();
+                img.addEventListener('load', done, { once: true });
+                img.addEventListener('error', done, { once: true });
+              })();
+            </script>
             <div class="stage-overlay">
               <div class="chip-group">
                 <span class="stage-chip"><svg class="chip-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg><span id="hero-size">900 × 600 · webp</span></span>
@@ -201,34 +295,38 @@ const stats = [
     <!-- HOW IT WORKS -->
     <section class="how" id="how">
       <div class="section-head">
-        <h2>One URL in. One image out.</h2>
-        <p>No more generating thumbnails and building complex processing pipelines. picturium reads the URL parameters, transforms the file, and caches the result.</p>
+        <h2>The URL is the whole pipeline.</h2>
+        <p>No resize jobs, no thumbnail folders, no upload step. Describe the image you want in the link, and picturium renders it on the first request and serves it from cache after that.</p>
       </div>
 
       <div class="how-flow">
-        <div class="flow-step">
+        <div class="flow-step" style="--i:0">
           <span class="num">01</span>
-          <h3>Point at any source</h3>
-          <p>Use a local folder, an S3 bucket, or any other mounted source. There is no separate import step.</p>
-          <div class="code"><span class="k">root</span>=<span class="v">"./media"</span></div>
+          <h3>Drop files in a folder</h3>
+          <p>Every file in it is already a URL. Photos, PDFs, SVGs and Office docs. No upload API.</p>
+          <div class="code"><span class="k">media</span>/cat.jpg → <span class="v">/cat.jpg</span></div>
         </div>
-        <div class="flow-arrow">
-          <svg viewBox="0 0 80 20" preserveAspectRatio="none"><path d="M0 10 L70 10 M62 4 L72 10 L62 16" fill="none" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+        <div class="flow-arrow" style="--i:1" aria-hidden="true">
+          <span class="flow-track"></span>
+          {[0, 1, 2, 3].map((p) => <i style={`--p:${p}`}></i>)}
+          <svg viewBox="0 0 80 20"><path d="M62 4 L72 10 L62 16" fill="none" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
         </div>
-        <div class="flow-step">
+        <div class="flow-step" style="--i:2">
           <span class="num">02</span>
-          <h3>Ask in the URL</h3>
-          <p>Add the size, crop, rotation, effects, format, and quality you want as URL parameters. No SDK is required.</p>
+          <h3>Describe what you need</h3>
+          <p>Size, crop, format, filters, watermark. Every option is a query parameter, so any <code>&lt;img&gt;</code> tag can use it.</p>
           <div class="code">/cat.jpg?<span class="k">w</span>=<span class="v">600</span>&amp;<span class="k">fit</span>=<span class="v">cover</span></div>
         </div>
-        <div class="flow-arrow">
-          <svg viewBox="0 0 80 20" preserveAspectRatio="none"><path d="M0 10 L70 10 M62 4 L72 10 L62 16" fill="none" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+        <div class="flow-arrow" style="--i:3" aria-hidden="true">
+          <span class="flow-track"></span>
+          {[0, 1, 2, 3].map((p) => <i style={`--p:${p}`}></i>)}
+          <svg viewBox="0 0 80 20"><path d="M62 4 L72 10 L62 16" fill="none" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>
         </div>
-        <div class="flow-step">
+        <div class="flow-step" style="--i:4">
           <span class="num">03</span>
-          <h3>Get it back, cached</h3>
-          <p>Rust and libvips render the image, then picturium caches the result by URL for later requests.</p>
-          <div class="code"><span class="ok">200 OK</span> · <span class="v">image/webp</span> · 12ms</div>
+          <h3>Rendered once, served forever</h3>
+          <p>libvips renders it on the first request. After that, it comes straight from cache.</p>
+          <div class="code"><span class="k">1×</span> render → <span class="ok">∞×</span> cache</div>
         </div>
       </div>
     </section>
@@ -236,8 +334,8 @@ const stats = [
     <!-- FEATURES -->
     <section class="features">
       <div class="section-head">
-        <h2>What it can do</h2>
-        <p>Common image CDN features, available as URL parameters and running on your own hardware.</p>
+        <h2>An image CDN, minus the bill.</h2>
+        <p>Every feature below is a query parameter on your own server. No per-transform pricing, and nothing phones home.</p>
       </div>
 
       <div class="feature-grid">
@@ -258,7 +356,7 @@ const stats = [
     <section class="playground" id="playground">
       <div class="section-head">
         <h2>Try it yourself!</h2>
-        <p>Adjust parameters on the right a watch the image come to life</p>
+        <p>Drag a slider, pick a recipe or type straight into the URL. A real picturium server renders every change.</p>
       </div>
       <div class="playground-wrap"><Playground /></div>
     </section>
@@ -267,61 +365,48 @@ const stats = [
     <section class="install" id="install">
       <div class="install-grid">
         <div class="install-copy">
-          <h2 style="margin-top:14px">Get started in minutes.</h2>
-          <p>Run one binary, point it at a folder or mounted bucket, and start transforming files.</p>
+          <h2 style="margin-top:14px">Ready before your coffee cools.</h2>
+          <p>The installer asks a few questions, pulls the image, waits until it's healthy and prints your URL. Docker is all you need.</p>
           <ul class="install-list">
-            <li>Single static binary — no runtime, no JVM</li>
-            <li>Ships as a Docker image — <code>docker pull picturium</code></li>
-            <li>Optional TOML configuration</li>
-            <li>Health, metrics, and access log out of the box</li>
+            <li>Press Enter through the defaults, or skip them all</li>
+            <li>Turn on signed URLs and get the secret generated for you</li>
+            <li>Run it again to upgrade. Config and secrets stay put</li>
+            <li>Pinned to one version. No surprise updates</li>
           </ul>
         </div>
 
         <div class="term">
-          <div class="term-tabs" role="tablist">
-            <button class="term-tab" data-tab="docker" role="tab" aria-selected="true">docker</button>
-            <button class="term-tab" data-tab="cargo" role="tab" aria-selected="false">cargo</button>
-            <button class="term-tab" data-tab="binary" role="tab" aria-selected="false">binary</button>
-            <button class="term-tab" data-tab="config" role="tab" aria-selected="false">config.toml</button>
+          <div class="term-tabs" role="tablist" aria-label="Install method">
+            <button class="term-tab" id="tab-installer-tab" data-tab="installer" role="tab" aria-selected="true" aria-controls="tab-installer" tabindex="0">installer</button>
+            <button class="term-tab" id="tab-docker-tab" data-tab="docker" role="tab" aria-selected="false" aria-controls="tab-docker" tabindex="-1">docker</button>
+            <button class="term-tab" id="tab-config-tab" data-tab="config" role="tab" aria-selected="false" aria-controls="tab-config" tabindex="-1">config.toml</button>
           </div>
-          <div class="term-body" id="tab-docker" role="tabpanel">
+          <div class="term-body" id="tab-installer" role="tabpanel" aria-labelledby="tab-installer-tab" tabindex="0">
+            <span class="com"># needs Docker with the compose plugin</span><br />
+            <span class="prompt">$</span> curl -fsSL https://picturium.cc/install.sh | sh<br /><br />
+            <span class="dim">Install directory [~/picturium]:</span><br />
+            <span class="dim">Directory with the images to serve [~/picturium/data]:</span> <span class="str">/srv/media</span><br />
+            <span class="dim">Port [20045]:</span><br />
+            <span class="dim">Listen address (127.0.0.1 if behind a reverse proxy) [0.0.0.0]:</span><br />
+            <span class="dim">Require signed URLs (recommended for public servers)? (y/n) [n]:</span> <span class="arg">y</span><br />
+            <span class="dim">...</span><br /><br />
+            <span class="ok">Picturium {VERSION} is running at http://127.0.0.1:20045</span><br /><br />
+            <span class="com"># later: same command upgrades to the newest release</span><br />
+            <span class="prompt">$</span> curl -fsSL https://picturium.cc/install.sh | sh<br />
+            <span class="dim">Upgrade to {VERSION}? (y/n) [y]:</span>
+          </div>
+          <div class="term-body" id="tab-docker" role="tabpanel" aria-labelledby="tab-docker-tab" tabindex="0" hidden>
             <span class="com"># pull and run, mounting ./media as the source</span><br />
             <span class="prompt">$</span> docker run -d --name picturium \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;-p <span class="arg">8080</span>:<span class="arg">8080</span> \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;-e <span class="str">PICTURIUM__SERVER__PORT=8080</span> \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;-e <span class="str">PICTURIUM__DATA__DIR=/srv/media</span> \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;-e <span class="str">PICTURIUM__CACHE__DIR=/var/cache/picturium</span> \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;-v <span class="str">$(pwd)/media</span>:<span class="str">/srv/media</span> \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;-v <span class="str">$(pwd)/cache</span>:<span class="str">/var/cache/picturium</span> \<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">ghcr.io/picturium/picturium</span>:<span class="arg">{VERSION}</span><br /><br />
-            <span class="dim">a1f3...c9  picturium-server  listening on 0.0.0.0:8080</span><br /><br />
-            <span class="prompt">$</span> curl -I <span class="str">"http://localhost:8080/sample.jpg?w=600&amp;format=webp"</span><br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-p <span class="arg">20045</span>:<span class="arg">20045</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-v <span class="str">$(pwd)/media</span>:<span class="str">/app/data:ro</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;-v <span class="str">picturium-cache</span>:<span class="str">/app/cache</span> \<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">lamka02sk/picturium</span>:<span class="arg">{VERSION}</span><br /><br />
+            <span class="prompt">$</span> curl -I <span class="str">"http://localhost:20045/sample.jpg?w=600&amp;f=webp"</span><br />
             <span class="ok">HTTP/1.1 200 OK</span><br />
-            <span class="dim">content-type: image/webp</span><br />
-            <span class="dim">content-length: 41216</span><br />
-            <span class="dim">x-picturium-cache: MISS  · 14ms</span>
+            <span class="dim">content-type: image/webp</span>
           </div>
-          <div class="term-body" id="tab-cargo" role="tabpanel" hidden>
-            <span class="com"># requires libvips (&gt;=8.14) — `brew install vips` on macOS</span><br />
-            <span class="prompt">$</span> cargo install picturium<br /><br />
-            <span class="dim">Compiling picturium v{VERSION}</span><br />
-            <span class="dim">  Finished release [optimized] target(s) in 38.2s</span><br />
-            <span class="dim">  Installed package `picturium v{VERSION}` (executable `picturium`)</span><br /><br />
-            <span class="prompt">$</span> PICTURIUM__DATA__DIR=./media PICTURIUM__SERVER__PORT=<span class="arg">8080</span> picturium<br />
-            <span class="ok">▶</span> picturium {VERSION} — serving <span class="str">./media</span> on :8080
-          </div>
-          <div class="term-body" id="tab-binary" role="tabpanel" hidden>
-            <span class="com"># download a prebuilt binary for your platform</span><br />
-            <span class="prompt">$</span> curl -sSL https://picturium.dev/install.sh | sh<br /><br />
-            <span class="dim">picturium {VERSION} (linux-x86_64)</span><br />
-            <span class="dim">installed to /usr/local/bin/picturium</span><br /><br />
-            <span class="prompt">$</span> PICTURIUM_CONFIG=<span class="str">./config.toml</span> picturium<br />
-            <span class="ok">▶</span> picturium {VERSION}<br />
-            <span class="ok">▶</span> root  <span class="dim">./media</span><br />
-            <span class="ok">▶</span> cache <span class="dim">./cache  (LRU, 8 GB)</span><br />
-            <span class="ok">▶</span> listening on <span class="str">0.0.0.0:8080</span>
-          </div>
-          <div class="term-body" id="tab-config" role="tabpanel" hidden>
+          <div class="term-body" id="tab-config" role="tabpanel" aria-labelledby="tab-config-tab" tabindex="0" hidden>
             <span class="com"># config.toml — only include values you want to change</span><br />
             <span class="kw">[server]</span><br />
             host = <span class="str">"0.0.0.0"</span><br />
@@ -343,33 +428,90 @@ const stats = [
     <section class="perf">
       <div class="perf-inner">
         <div class="perf-copy">
-          <h2 style="margin-top:14px">Fast by design.</h2>
-          <p>picturium combines <code>axum</code>, <code>libvips</code>, and asynchronous I/O in one static binary. Cached requests avoid rendering the image again.</p>
+          <h2 style="margin-top:14px">Fast on the first request. Instant on the second.</h2>
+          <p>Every render runs on <code>libvips</code> and async Rust. Big sources are shrunk while they load, and identical requests arriving together are rendered once.</p>
+          <p>After that, a memory and disk cache answers instead. It comes built in, and completely for free.</p>
           <div class="stack-row">
             <span class="tag"><b>axum</b> http</span>
             <span class="tag"><b>libvips</b> imaging</span>
             <span class="tag"><b>tokio</b> async</span>
-            <span class="tag"><b>ravif</b> avif</span>
-            <span class="tag"><b>image-rs</b> codecs</span>
+            <span class="tag"><b>foyer</b> cache</span>
           </div>
         </div>
-        <div class="perf-stats">
-          {stats.map((s) => (
-            <div class="stat">
-              <span class="l">{s.label}</span>
-              <span class="v"><span class="px">{s.value}</span><span class="u">{s.unit}</span></span>
-              <span class="h">{s.hint}</span>
-            </div>
-          ))}
-        </div>
+        <figure class="bench">
+          <figcaption class="bench-head">
+            <span class="bench-title">Median latency per request</span>
+            <span class="bench-legend">
+              <span class="key key-pic">picturium</span>
+              <span class="key key-hit">picturium, cached</span>
+              <span class="key key-imp">imgproxy</span>
+            </span>
+          </figcaption>
+          <div class="bench-rows">
+            {bench.map((r, i) => (
+              <div class="bench-row" style={`--r:${i}`}>
+                <span class="bench-label">{r.label}</span>
+                <span class="bar bar-pic" style={`--w:${(r.pic[0] / benchMax) * 100}%`} title={`picturium · p50 ${ms(r.pic[0])} · p99 ${ms(r.pic[1])}`}>
+                  <i></i><span class="sr">picturium</span> <span data-count={Math.round(r.pic[0])}>{Math.round(r.pic[0])}</span> ms
+                </span>
+                <span class="bar bar-hit" style={`--w:${(r.hit / benchMax) * 100}%`} title={`picturium, cached · ${r.hit} ms`}>
+                  <i></i><span class="sr">picturium, cached</span> <span data-count={r.hit}>{r.hit}</span> ms
+                </span>
+                <span class="bar bar-imp" style={`--w:${(r.imp[0] / benchMax) * 100}%`} title={`imgproxy · p50 ${ms(r.imp[0])} · p99 ${ms(r.imp[1])}`}>
+                  <i></i><span class="sr">imgproxy</span> <span data-count={Math.round(r.imp[0])}>{Math.round(r.imp[0])}</span> ms
+                </span>
+              </div>
+            ))}
+          </div>
+          <div class="bench-sums">
+            <div><b><span data-count="11">11</span> of 15</b><span>scenarios faster at the median</span></div>
+            <div><b data-count="0.97">0.97</b><span>SSIM vs 0.93 at 1920×1080 webp, similar file size</span></div>
+          </div>
+          <p class="bench-note">Lower is better. First requests: caches off, 4 CPUs each, 50 requests at concurrency 4, <code>q=80</code>. Cached: the same URL requested again.</p>
+        </figure>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq" id="faq">
+      <div class="section-head">
+        <h2>Questions</h2>
+        <p>The things people ask before pointing picturium at their media.</p>
+      </div>
+      <div class="faq-list">
+        {faqs.map((f) => (
+          <details class="faq-item">
+            <summary>
+              {f.q}
+              <svg class="faq-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <p set:html={f.a} />
+            <a class="faq-link" href={f.href}>Read more
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </a>
+          </details>
+        ))}
       </div>
     </section>
 
     <!-- CTA -->
     <section class="cta">
       <div class="cta-inner">
-        <h2>Stop maintaining the thumbnail pipeline.</h2>
-        <p>picturium is one binary, one optional config file, and a small set of URL parameters. Try the playground, then point it at your media folder.</p>
+        <div class="cta-files" aria-hidden="true">
+          <ul class="cta-old">
+            {['cat_150x150.jpg', 'cat_300w.jpg', 'cat_600w.webp', 'cat@2x.png', 'cat_retina_FINAL_v2.jpg'].map((f, i) => (
+              <li style={`--i:${i}`}>{f}</li>
+            ))}
+          </ul>
+          <svg class="cta-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v11M3.5 8.5L8 13l4.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="cta-new">/cat.jpg?<span class="k">w</span>=<span class="v">600</span>&amp;<span class="k">f</span>=<span class="v">auto</span></span>
+        </div>
+        <h2>Delete the thumbnail folder.</h2>
+        <p>Keep one original per image and ask for every other size in the URL. One command installs picturium, and there is nothing to maintain after that.</p>
+        <div class="hero-run cta-run">
+          <code id="cta-run-cmd">curl -fsSL https://picturium.cc/install.sh | sh</code>
+          <button type="button" class="hero-run-copy" data-copy="#cta-run-cmd" aria-label="Copy command">copy</button>
+        </div>
         <div class="cta-ctas">
           <a class="btn btn-primary" href="/docs">Read the docs</a>
           <a class="btn" href={REPO} target="_blank" rel="noopener">View on GitHub</a>
@@ -380,13 +522,109 @@ const stats = [
 </Base>
 
 <script>
-  const tabs = document.querySelectorAll('.term-tab');
-  tabs.forEach((t) => {
-    t.addEventListener('click', () => {
-      tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
-      document.querySelectorAll('.term-body').forEach((b) => (b.hidden = true));
-      document.getElementById('tab-' + t.dataset.tab).hidden = false;
+  // pixel burst on copy — squares match the hero background field
+  const pxColors = ['--px-red', '--px-orange', '--px-yellow', '--px-green', '--px-cyan', '--px-blue', '--px-magenta']
+    .map((v) => getComputedStyle(document.documentElement).getPropertyValue(v));
+  const burst = (from) => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const r = from.getBoundingClientRect();
+    for (let i = 0; i < 24; i++) {
+      const p = document.createElement('i');
+      const size = 4 + Math.random() * 5;
+      p.style.cssText = `position:fixed;left:${r.left + r.width / 2}px;top:${r.top + r.height / 2}px;width:${size}px;height:${size}px;background:${pxColors[i % pxColors.length]};pointer-events:none;z-index:99`;
+      document.body.append(p);
+      const a = (Math.random() * 2 - 1) * Math.PI * 0.9 - Math.PI / 2;
+      const d = 60 + Math.random() * 110;
+      p.animate(
+        [
+          { transform: 'translate(-50%,-50%) rotate(0deg)', opacity: 1 },
+          {
+            transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d + 90}px) rotate(${Math.random() * 540 - 270}deg)`,
+            opacity: 0,
+          },
+        ],
+        { duration: 1400 + Math.random() * 900, easing: 'cubic-bezier(.15,.6,.25,1)' },
+      ).finished.finally(() => p.remove());
+    }
+  };
+
+  // one copy button, wired by data-copy selector
+  document.querySelectorAll('[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const el = document.querySelector(btn.dataset.copy);
+      try {
+        await navigator.clipboard.writeText(el.textContent.trim());
+        btn.textContent = 'copied';
+      } catch {
+        // no clipboard permission (insecure origin, denied) — select it instead
+        getSelection().selectAllChildren(el);
+        btn.textContent = 'press ctrl+c';
+      }
+      burst(btn);
+      setTimeout(() => (btn.textContent = 'copy'), 1500);
     });
+  });
+
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // .armed hides the end state, .is-in plays it once the element scrolls into
+  // view. Only for things below the fold, so nothing on screen blinks out.
+  const reveal = (el, threshold, onIn) => {
+    if (!el || reduced || !('IntersectionObserver' in window) || el.getBoundingClientRect().top <= innerHeight) return;
+    el.classList.add('armed');
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      el.classList.add('is-in');
+      onIn?.(el);
+      io.disconnect();
+    }, { threshold });
+    io.observe(el);
+  };
+
+  // count numbers up from zero, in step with their bar (see .bench-row --r)
+  const countUp = (root) => {
+    root.querySelectorAll('[data-count]').forEach((el) => {
+      const to = Number(el.dataset.count);
+      const dp = (el.dataset.count.split('.')[1] ?? '').length;
+      const delay = Number(el.closest('.bench-row')?.style.getPropertyValue('--r') || 0) * 90;
+      const start = performance.now() + delay;
+      el.textContent = (0).toFixed(dp);
+      const tick = (now) => {
+        const t = Math.min(1, Math.max(0, (now - start) / 900));
+        el.textContent = (to * (1 - (1 - t) ** 3)).toFixed(dp);
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  };
+
+  if ('IntersectionObserver' in window) {
+    const sleeper = new IntersectionObserver((es) => es.forEach((e) => e.target.classList.toggle('idle', !e.isIntersecting)));
+    document.querySelectorAll('.hero, .ribbon, .how-flow').forEach((el) => sleeper.observe(el));
+  }
+
+  reveal(document.querySelector('.how-flow'), 0.3);
+  reveal(document.querySelector('.bench'), 0.35, countUp);
+  // closing section: strike out the pre-generated variants once it scrolls into view
+  reveal(document.querySelector('.cta'), 0.35);
+
+  const tabs = [...document.querySelectorAll('.term-tab')];
+  const selectTab = (t) => {
+    tabs.forEach((x) => {
+      const on = x === t;
+      x.setAttribute('aria-selected', String(on));
+      // roving tabindex: Tab reaches the tablist once, arrows move within it
+      x.tabIndex = on ? 0 : -1;
+      document.getElementById('tab-' + x.dataset.tab).hidden = !on;
+    });
+  };
+  tabs.forEach((t) => t.addEventListener('click', () => selectTab(t)));
+  document.querySelector('.term-tabs').addEventListener('keydown', (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const next = tabs[(tabs.indexOf(document.activeElement) + step + tabs.length) % tabs.length];
+    next.focus();
+    selectTab(next);
   });
 
   // hero chips: whatever picturium actually returned
@@ -403,7 +641,7 @@ const stats = [
     // srcset means the browser picks the candidate; show the one it actually got.
     const url = new URL(src);
     url.searchParams.delete('cache');
-    document.getElementById('hero-url-params').textContent = `?${url.searchParams}`;
+    document.getElementById('hero-url-params').textContent = decodeURIComponent(`?${url.searchParams}`);
     const e = performance.getEntriesByName(src).pop();
     if (e) document.getElementById('hero-ms').textContent = `↻ ${Math.round(e.duration)} ms`;
     // Resource timing zeroes body sizes cross-origin unless the server sends
@@ -426,6 +664,7 @@ const stats = [
     }
   };
   hero.complete ? heroChips() : hero.addEventListener('load', heroChips);
+
 </script>
 
 <style is:global>
@@ -445,9 +684,10 @@ const stats = [
     z-index: 0;
   }
   /* Pixel field — squares in the logo rainbow spilling leftwards from behind
-     the image stage. The <i> is one 28px square; every other pixel is a
-     box-shadow of it (see pixelField above), so this is a single DOM node. */
-  .bg-pixels > i {
+     the image stage. Each <i> is one 28px square and its group's pixels are
+     box-shadows of it (see pixelField above), so the field is a handful of
+     DOM nodes. The <b>s are the runners that hop out along the grid. */
+  .px-field {
     position: absolute;
     top: 0;
     /* lines up with the left edge of the stage, so the densest column is the
@@ -456,12 +696,22 @@ const stats = [
     width: 28px;
     height: 28px;
   }
+  .px-field > i { position: absolute; inset: 0; }
+  .px-field > b {
+    position: absolute;
+    top: calc(var(--r) * 28px);
+    left: 0;
+    width: 28px;
+    height: 28px;
+    background: rgba(var(--h), 0.5);
+    opacity: 0;
+  }
   @media (max-width: 980px) {
     /* Same field, scaled down from its right edge and dimmed — the stage sits
        below the copy here, so the squares hang off the right instead. */
-    .bg-pixels > i {
+    .bg-pixels { opacity: 0.55; }
+    .px-field {
       right: 4%;
-      opacity: 0.55;
       transform: scale(0.6);
       transform-origin: top right;
     }
@@ -479,6 +729,7 @@ const stats = [
   }
   .hero-heading {
     grid-column: 1 / -1;
+    container-type: inline-size;
   }
   .hero-copy {
     display: flex;
@@ -491,7 +742,8 @@ const stats = [
     margin: 0;
     font-family: var(--f-display);
     font-weight: 600;
-    font-size: clamp(64px, 8.6vw, 112px);
+    /* one line on desktop: the line is ~11.7em wide, so 8.2cqw leaves ~4% slack */
+    font-size: min(8.2cqw, 108px);
     line-height: 0.92;
     letter-spacing: -0.055em;
     /* pull the first glyph's left side bearing back to the optical margin */
@@ -527,6 +779,48 @@ const stats = [
     color: var(--ink-3);
   }
   .hero-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
+
+  .hero-run-hook {
+    margin: 10px 0 -10px 0;
+    font-family: var(--f-mono);
+    font-size: 16px;
+    color: var(--ink-1);
+  }
+  .hero-run {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px 10px 14px;
+    /* nowrap code would size the box to the full command; scroll it instead */
+    max-width: min(560px, 100%);
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.33);
+    backdrop-filter: blur(3px);
+  }
+  .hero-run code {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .hero-run-copy {
+    flex: none;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-3);
+    font-family: var(--f-mono);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .hero-run-copy:hover { color: var(--ink-1); border-color: var(--ink-4); }
 
   /* hero stage — the URL → image visual */
   .hero-stage {
@@ -606,6 +900,36 @@ const stats = [
     padding: 16px;
     background: linear-gradient(0deg, rgba(8, 9, 11, 0.5), transparent 50%);
   }
+  /* loading mosaic — only shown by the script while the image is in flight */
+  .stage-reveal {
+    display: none;
+    position: absolute;
+    inset: 0;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    pointer-events: none;
+  }
+  .stage-body.armed .stage-reveal { display: grid; }
+  /* a hair of overlap so subpixel seams don't show the image early */
+  .stage-reveal i { position: relative; margin: -0.5px; background: var(--bg-2); }
+  .stage-reveal i::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgb(var(--h));
+    opacity: 0;
+    animation: cell-wait 1.1s ease-in-out calc(var(--d) * -4ms) infinite alternate;
+  }
+  .stage-body.is-in .stage-reveal i {
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity 0.28s steps(3) calc(var(--d) * 1ms), transform 0.28s steps(3) calc(var(--d) * 1ms);
+  }
+  /* done: drop the cells so they stop compositing */
+  .stage-body.is-in .stage-reveal { animation: reveal-off 0s 1.2s forwards; }
+  @keyframes reveal-off { to { visibility: hidden; } }
+  @keyframes cell-wait { to { opacity: 0.16; } }
+
   .stage-chip {
     display: inline-flex;
     align-items: center;
@@ -632,7 +956,7 @@ const stats = [
     gap: 8px;
   }
   .stage-chip-delta { color: var(--ink-0); }
-  .stage-chip-delta .delta-arrow { margin: 0 6px; color: var(--ink-3); }
+  .stage-chip-delta .delta-arrow { margin: 0 6px; }
   .stage-chip-delta .delta-pct {
     margin-left: 8px;
     padding-left: 8px;
@@ -642,10 +966,20 @@ const stats = [
   }
 
   .ribbon {
+    position: relative;
+    overflow: hidden;
     height: 4px;
     background: var(--rainbow);
     opacity: 0.6;
     image-rendering: pixelated;
+  }
+  .ribbon::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 18%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+    transform: translateX(-100%);
   }
 
   /* ───────────────────── LOGOS BAND ───────────────────── */
@@ -733,6 +1067,7 @@ const stats = [
     border-radius: var(--r-xl);
     background: var(--bg-1);
     min-height: 220px;
+    align-self: stretch;
   }
   .flow-step .num {
     font-family: var(--f-pixel);
@@ -771,8 +1106,37 @@ const stats = [
     justify-content: center;
     color: var(--ink-4);
   }
-  .flow-arrow svg { width: 100%; height: 20px; }
+  /* the arrow is a conveyor: grey pixels go in, rainbow pixels come out */
+  .flow-arrow {
+    position: relative;
+    align-self: center;
+    height: 20px;
+    container-type: inline-size;
+  }
+  .flow-arrow svg { position: absolute; inset: 0; width: 100%; height: 20px; }
   .flow-arrow path { stroke: url(#rainbowstroke); }
+  .flow-track {
+    position: absolute;
+    left: 6px;
+    right: 14px;
+    top: 9px;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--ink-4) 0 4px, transparent 4px 10px);
+    opacity: 0.6;
+  }
+  .flow-arrow > i {
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 8px;
+    height: 8px;
+    background: var(--c, var(--accent));
+    opacity: 0;
+  }
+  .flow-arrow > i:nth-of-type(1) { --c: var(--px-red); }
+  .flow-arrow > i:nth-of-type(2) { --c: var(--px-yellow); }
+  .flow-arrow > i:nth-of-type(3) { --c: var(--px-cyan); }
+  .flow-arrow > i:nth-of-type(4) { --c: var(--px-magenta); }
 
   /* ───────────────────── FEATURES GRID ───────────────────── */
   .features {
@@ -949,45 +1313,74 @@ const stats = [
     gap: 64px;
     align-items: center;
   }
-  .perf-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--line-soft);
+  .bench {
+    margin: 0;
+    padding: 24px;
     border: 1px solid var(--line-soft);
     border-radius: var(--r-xl);
-    overflow: hidden;
-  }
-  .stat {
     background: var(--bg-2);
-    padding: 28px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    font-variant-numeric: tabular-nums;
   }
-  .stat .v {
-    font-family: var(--f-display);
-    font-size: 44px;
-    font-weight: 600;
-    color: var(--ink-0);
-    letter-spacing: -0.02em;
+  .bench-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .bench-title { font-family: var(--f-display); font-weight: 600; font-size: 15px; color: var(--ink-0); }
+  .bench-legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--ink-2); }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .key::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+  .key-pic, .bar-pic { --c: var(--accent); }
+  .key-hit, .bar-hit { --c: var(--px-green); }
+  .key-imp, .bar-imp { --c: var(--ink-4); }
+  .bench-rows { display: flex; flex-direction: column; gap: 16px; }
+  .bench-row { display: flex; flex-direction: column; gap: 2px; }
+  .bench.armed:not(.is-in) .bar i { transform: scaleX(0); }
+  .bench-label { font-size: 13px; color: var(--ink-1); margin-bottom: 4px; }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--ink-2);
     line-height: 1;
   }
-  .stat .v .u { font-size: 22px; color: var(--ink-3); margin-left: 2px; }
-  .stat .v .px { font-family: var(--f-pixel); color: var(--accent); }
-  .stat .l {
-    font-size: 12.5px;
-    color: var(--ink-3);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+  .bar i {
+    display: block;
+    width: calc(var(--w) * 0.82);
+    transform-origin: left;
+    transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--r) * 90ms);
+    min-width: 4px;
+    height: 8px;
+    border-radius: 0 4px 4px 0;
+    background: var(--c);
   }
-  .stat .h {
-    font-family: var(--f-display);
-    font-weight: 500;
-    font-size: 14.5px;
-    color: var(--ink-1);
-    letter-spacing: -0.005em;
+  .bar-pic, .bar-hit { color: var(--ink-0); }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
+  .bench-sums {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .bench-sums div { display: flex; flex-direction: column; gap: 4px; }
+  .bench-sums b { font-family: var(--f-pixel); font-weight: 400; font-size: 30px; line-height: 1; color: var(--accent); }
+  .bench-sums div > span { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+  .bench-note { margin: 16px 0 0; font-size: 12px; color: var(--ink-3); }
+  .bench-note code { font-size: 11.5px; }
   .perf-copy h2 {
     margin: 0 0 16px;
     font-family: var(--f-display);
@@ -1013,6 +1406,72 @@ const stats = [
     color: var(--ink-2);
   }
   .stack-row .tag b { color: var(--ink-0); font-weight: 500; }
+
+  /* ───────────────────── FAQ ───────────────────── */
+  .faq {
+    padding: 80px 28px 100px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .faq-list {
+    max-width: 780px;
+    margin: 0 auto;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    background: var(--bg-1);
+  }
+  .faq-item + .faq-item { border-top: 1px solid var(--line-soft); }
+  .faq-item summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: var(--f-display);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink-0);
+    letter-spacing: -0.005em;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary:hover { color: var(--accent); }
+  .faq-chevron { flex-shrink: 0; color: var(--ink-3); transition: transform 0.18s; }
+  .faq-item[open] .faq-chevron { transform: rotate(180deg); }
+  .faq-item > p {
+    margin: 0;
+    padding: 0 24px 8px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+  .faq-item > p code {
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-0);
+    border: 1px solid var(--line);
+    color: var(--ink-1);
+  }
+  .faq-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 24px 20px;
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .faq-link:hover { text-decoration: underline; }
+  @media (max-width: 640px) {
+    .faq { padding: 64px 18px 72px; }
+    .faq-item summary { padding: 18px; font-size: 15px; }
+    .faq-item > p { padding: 0 18px 8px; }
+    .faq-link { margin: 0 18px 18px; }
+  }
 
   /* ───────────────────── CTA ───────────────────── */
   .cta {
@@ -1050,6 +1509,123 @@ const stats = [
   }
   .cta p { margin: 0; font-size: 16.5px; color: var(--ink-2); max-width: 50ch; }
   .cta-ctas { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .cta-files { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .cta-old {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .cta-old li {
+    position: relative;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--bg-2);
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .cta-old li::after {
+    content: "";
+    position: absolute;
+    left: 7px;
+    right: 7px;
+    top: 50%;
+    height: 1px;
+    background: var(--px-red);
+    opacity: 0.75;
+    transform-origin: left;
+  }
+  .cta-arrow { color: var(--ink-4); }
+  .cta-new {
+    padding: 9px 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: var(--r-md);
+    background: var(--bg-2);
+    box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--accent) 35%, transparent);
+    font-family: var(--f-mono);
+    font-size: 13.5px;
+    color: var(--ink-1);
+  }
+  .cta-new .k { color: var(--accent); }
+  .cta-new .v { color: var(--px-yellow); }
+  .cta-run { width: 100%; max-width: 460px; }
+
+  .cta.armed .cta-old li { color: var(--ink-2); }
+  .cta.armed .cta-old li::after { transform: scaleX(0); }
+  .cta.armed .cta-new { opacity: 0; transform: translateY(-6px); filter: blur(4px); }
+  .cta.armed.is-in .cta-old li {
+    color: var(--ink-3);
+    transition: color 0.4s ease-out calc(var(--i) * 110ms + 200ms);
+  }
+  .cta.armed.is-in .cta-old li::after {
+    transform: scaleX(1);
+    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--i) * 110ms);
+  }
+  .cta.armed.is-in .cta-new {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: opacity 0.6s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), filter 0.6s;
+    transition-delay: 0.85s;
+  }
+
+  /* ───────────────────── MOTION ───────────────────── */
+  /* loops sleep while their section is offscreen (see .idle in the script) */
+  .idle *, .idle *::before, .idle *::after { animation-play-state: paused !important; }
+  @media (prefers-reduced-motion: no-preference) {
+    /* each shadow group breathes on its own clock, so the field shimmers */
+    .px-field > i {
+      animation: px-twinkle calc(3.4s + var(--g) * 1.3s) ease-in-out calc(var(--g) * -1.7s) infinite alternate;
+    }
+    @keyframes px-twinkle { to { opacity: 0.25; } }
+    /* steps(n) moves exactly one 28px cell per tick */
+    .px-field > b { animation: px-run var(--t) steps(var(--n), end) var(--dl) infinite; }
+    @keyframes px-run {
+      0% { transform: none; opacity: 1; }
+      55%, 100% { transform: translateX(calc(var(--n) * -28px)); opacity: 0; }
+    }
+
+    .hero-h1 .accent {
+      background: linear-gradient(90deg, #ff3a3a, #ff8a1f, #ffd633, #33e066, #2bd4f0, #3a78ff, #d83cff, #ff3a3a) 0 0 / 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      animation: rainbow-slide 14s linear infinite;
+    }
+    @keyframes rainbow-slide { to { background-position: 200% 0; } }
+
+    .ribbon::after { animation: glint 7s cubic-bezier(0.5, 0, 0.5, 1) 1s infinite; }
+    @keyframes glint {
+      0% { transform: translateX(-100%); }
+      40%, 100% { transform: translateX(560%); }
+    }
+
+    .flow-track { animation: march 0.6s linear infinite; }
+    @keyframes march { to { background-position: 10px 0; } }
+    .flow-arrow > i {
+      animation: flow-packet 2.4s cubic-bezier(0.45, 0, 0.55, 1) calc(var(--p) * -0.6s - var(--i) * 0.3s) infinite;
+    }
+    @keyframes flow-packet {
+      0% { transform: translateX(0) scale(0.6); opacity: 0; background: var(--ink-4); }
+      15% { opacity: 1; }
+      45% { background: var(--ink-4); }
+      65% { background: var(--c); transform: translateX(calc(50cqw - 4px)) scale(1); }
+      85% { opacity: 1; }
+      100% { transform: translateX(calc(100cqw - 20px)) scale(1); opacity: 0; background: var(--c); }
+    }
+
+    .how-flow.armed > * { opacity: 0; transform: translateY(16px); }
+    .how-flow.armed.is-in > * {
+      opacity: 1;
+      transform: none;
+      transition: opacity 0.6s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+      transition-delay: calc(var(--i) * 110ms);
+    }
+  }
 
   @media (max-width: 1100px) {
     .feature-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1059,14 +1635,14 @@ const stats = [
     .how-flow,
     .install-grid,
     .perf-inner {
-      grid-template-columns: 1fr;
+      /* minmax(0, …): the curl box would otherwise widen the track past the screen */
+      grid-template-columns: minmax(0, 1fr);
       gap: 24px;
     }
     .hero-heading { grid-column: auto; }
     .hero-copy { padding-bottom: 0; }
     .hero-stage { width: 100%; }
     .flow-arrow { display: none; }
-    .perf-stats { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 640px) {
     .feature-grid { grid-template-columns: 1fr; }
@@ -1074,7 +1650,7 @@ const stats = [
     section { padding: 64px 18px; }
     .hero { padding: 48px 18px 40px; }
     .hero-inner { padding-top: 16px; gap: 32px; }
-    .hero-h1 { font-size: clamp(48px, 15vw, 72px); line-height: 0.96; }
+    .hero-h1 { font-size: clamp(44px, 13.9vw, 66px); line-height: 0.96; }
     .hero-sub { font-size: 16px; }
     .hero-ctas .btn { flex: 1 1 auto; justify-content: center; }
     .hero-meta { flex-wrap: wrap; gap: 8px; }
@@ -1098,8 +1674,6 @@ const stats = [
     .cta-ctas .btn { flex: 1 1 auto; justify-content: center; }
 
     .term-body { padding: 18px 16px; font-size: 12px; overflow-x: auto; }
-    .perf-stats { grid-template-columns: 1fr; }
-    .stat { padding: 20px 18px; }
-    .stat .v { font-size: 34px; }
+    .bench { padding: 20px 18px; }
   }
 </style>

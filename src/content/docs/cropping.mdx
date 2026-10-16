@@ -6,9 +6,9 @@ description: Cut a fixed, aspect-ratio, or automatically selected region from a 
 import DataTable from '../../components/DataTable.astro';
 import TransformFlow from '../../components/TransformFlow.astro';
 
-Use the grouped `crop=` parameter to select a region of the source before picturium
-resizes it. Crop dimensions and offsets are source pixels; output `w`, `h`, `ar`, `fit`,
-and `pad` are applied afterwards.
+`crop=` cuts a region out of the source before anything gets resized. Its sizes and
+offsets are in source pixels, and the output parameters (`w`, `h`, `ar`, `fit` and `pad`)
+are applied to the region afterwards.
 
 ```text
 /photo.jpg?crop=w:800|h:600|g:center&w=400
@@ -16,25 +16,25 @@ and `pad` are applied afterwards.
 
 ## The crop parameter
 
-Join `key:value` pairs with `|`. Short and long key names are interchangeable, but the
-keys themselves are case-sensitive. Set at least one of `w`, `h`, or `ar`.
+Write it as `key:value` pairs joined with `|`. Short and long key names both work, but
+keys are case-sensitive. You need at least one of `w`, `h` or `ar`.
 
 <DataTable
   head={['Key', 'Accepted value', 'Default', 'Effect']}
   cols={['k', '', 'd', '']}
   rows={[
-    ['w · width', 'unsigned integer', 'unset', 'Width of the crop in source pixels.'],
-    ['h · height', 'unsigned integer', 'unset', 'Height of the crop in source pixels.'],
-    ['ar · aspect_ratio', 'auto · square · video · fraction', 'unset', 'Aspect ratio of the crop.'],
-    ['g · gravity', 'position · attention · entropy', 'image.crop_gravity', 'Places or selects the crop region.'],
-    ['x', 'signed integer', '0', 'Moves the region horizontally from its gravity position.'],
-    ['y', 'signed integer', '0', 'Moves the region vertically from its gravity position.'],
+    ['w · width', 'whole number', 'unset', 'Width of the region in source pixels.'],
+    ['h · height', 'whole number', 'unset', 'Height of the region in source pixels.'],
+    ['ar · aspect_ratio', 'auto · square · video · fraction', 'unset', 'Aspect ratio of the region.'],
+    ['g · gravity', 'position · attention · entropy', 'image.crop_gravity', 'Where the region sits, or how it\'s chosen.'],
+    ['x', 'whole number, may be negative', '0', 'Moves the region horizontally from where gravity put it.'],
+    ['y', 'whole number, may be negative', '0', 'Moves the region vertically from where gravity put it.'],
   ]}
 />
 
-`w:0`, `h:0`, and empty dimension values are treated as unset. A crop containing only
-placement keys, such as `crop=g:center|x:20`, is invalid. Unknown keys, malformed
-segments, and invalid values also return a client error.
+`w:0`, `h:0` and empty values count as unset. A crop with only placement keys, like
+`crop=g:center|x:20`, is rejected, and so are unknown keys, malformed pairs and invalid
+values.
 
 ```text
 /photo.jpg?crop=width:800|height:600|gravity:top-left
@@ -43,17 +43,17 @@ segments, and invalid values also return a client error.
 
 ## Choosing the region size
 
-The supplied dimensions determine the crop rectangle:
+The keys you set decide the size of the region:
 
-- `w` and `h` select that exact size; `ar` is ignored when both are present.
-- One dimension without `ar` spans the source on the other axis.
-- One dimension with `ar` derives the missing side from the ratio.
-- `ar` alone selects the largest matching rectangle that fits inside the source.
+- `w` and `h` together give that exact size, and `ar` is ignored.
+- Only one of them, without `ar`: the other side spans the whole source.
+- Only one of them, with `ar`: the other side comes from the ratio.
+- `ar` alone: the largest region of that ratio that fits in the source.
 
-`ar` accepts `auto`, `square`, `video`, or a fraction such as `4/3` or `16/9`. A custom
-ratio must be a fraction: `ar:1` is invalid, while `ar:1/1` and `ar:square` are valid.
+`ar` takes `auto`, `square`, `video`, or a fraction such as `4/3` or `16/9`. Custom
+ratios must be fractions: `ar:1` is rejected, `ar:1/1` and `ar:square` are fine.
 
-For a 1000 × 600 source, these definitions select:
+Here's what that looks like on a 1000 × 600 source:
 
 <DataTable
   head={['Definition', 'Selected size', 'With center gravity']}
@@ -66,22 +66,20 @@ For a 1000 × 600 source, these definitions select:
   ]}
 />
 
-A requested rectangle larger than the source is reduced to the source bounds instead of
-failing.
+Ask for a region bigger than the source and it's simply trimmed to the source, not
+rejected.
 
 ## Gravity and offsets
 
-`g` places the crop rectangle within the source:
+`g` positions the region inside the source:
 
 <p class="fmt">top · right · bottom · left · top-left · top-right · bottom-left · bottom-right · center · attention · entropy</p>
 
-The default comes from `image.crop_gravity` and is `center` unless configured otherwise.
-This is separate from the top-level `g` / `gravity` used by `fit=cover` and
-`fit=contain`.
+It defaults to `image.crop_gravity`, which is `center` unless you've changed it. This is
+separate from the top-level `g` / `gravity` that `fit=cover` and `fit=contain` use.
 
-After gravity places the rectangle, positive `x` moves it right and positive `y` moves
-it down; negative values move it left or up. The final position is clamped at every
-source edge.
+Once gravity has placed the region, `x` nudges it right and `y` nudges it down; negative
+values go left or up. The region never slides past the edge of the source.
 
 ```text
 /photo.jpg?crop=w:800|h:600|g:top-left
@@ -91,42 +89,42 @@ source edge.
 
 ## Smart crop
 
-Use `g:attention` to favour visually salient detail or `g:entropy` to favour the most
-information-rich region. libvips chooses the position, so `x` and `y` have no effect.
+`g:attention` goes for the most eye-catching detail, `g:entropy` for the busiest part of
+the image. libvips picks the position itself, so `x` and `y` are ignored.
 
 ```text
 /portrait.jpg?crop=ar:square|g:attention&w=600
 /texture.jpg?crop=w:800|h:450|g:entropy
 ```
 
-For an [animation](/docs/animation), picturium applies the grouped crop to every frame. Smart crop is
-therefore evaluated per frame; use a fixed gravity when the selected region must not
-move between frames.
+On an [animation](/docs/animation) the crop runs on every frame, and smart crop picks a
+spot separately for each one. If the region mustn't move between frames, use a fixed
+gravity.
 
 ## Crop, then size
 
-Cropping and `fit=cover` solve different steps. `crop=` chooses the source region first;
-`w`, `h`, `ar`, and `fit` then determine the output made from that region.
+`crop=` and `fit=cover` do different jobs. `crop=` picks the part of the source to work
+with; `w`, `h`, `ar` and `fit` then decide what the output made from it looks like.
 
 <TransformFlow />
 
-The later stages are documented in [Filters & effects](/docs/filters) and
+The later stages are covered in [Filters & effects](/docs/filters) and
 [Watermarking](/docs/watermarking).
 
-Explicit rotation changes the source before crop coordinates are calculated. Crop
-values are not multiplied by `dpr` or `scale`; they remain pixels of that oriented and
-rotated source.
+Rotation happens first, so crop coordinates refer to the image after EXIF orientation
+and `rot` have been applied. `dpr` and `scale` don't touch crop values; they stay in
+source pixels.
 
 ```text
-# Select an 800 × 600 source region, then resize it to 400 × 300.
+# Cut an 800 × 600 region, then resize it to 400 × 300.
 /photo.jpg?crop=w:800|h:600|g:center&w=400&h=300
 
-# Select the largest square region, then make a 600 × 400 cover output from it.
-/photo.jpg?crop=ar:square&w=600&h=400&fit=cover&g:top
+# Take the largest square, then make a 600 × 400 cover output from it.
+/photo.jpg?crop=ar:square&w=600&h=400&fit=cover&g=top
 ```
 
-The grouped crop also applies to each [extracted video frame or clip](/docs/animation#video-frames--clips)
-and each frame of an animated image. It is skipped when picturium returns the original source or a document
-response with [`f=pdf` or `f=svg`](/docs/documents).
+The crop also applies to each [video frame or clip](/docs/animation#video-frames--clips)
+and each frame of an animated image. It's skipped when picturium returns the original
+file or a document with [`f=pdf` or `f=svg`](/docs/documents).
 
-For output sizing after the region is selected, see [Sizing & layout](/docs/sizing).
+For what happens to the region afterwards, see [Sizing & layout](/docs/sizing).

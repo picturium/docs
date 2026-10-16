@@ -1,0 +1,18 @@
+---
+// Quick reference entries for URL parameters and their grouped keys. `id`
+// prefixes each anchor (#param-w, #crop-g); `filterable` opts the list into
+// ParamFilter. Rows are [names, values, default, note, more?].
+import EntryList from './EntryList.astro';
+import type { Row } from '../data/reference';
+
+interface Props {
+  rows: Row[];
+  id: string;
+  filterable?: boolean;
+}
+const { rows, id, filterable = false } = Astro.props;
+const entries = rows.map(([key, values, def, note, more]) => ({
+  key, values, def, note, href: more, anchor: `${id}-${key.split(' · ')[0]}`,
+}));
+---
+<EntryList entries={entries} filterable={filterable} />

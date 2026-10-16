@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/components/Playground.astro"
+        ],
+        "createdAt": "2026-10-16T17:46:13.740Z",
+        "reason": "agent: imgs are filled by the client script from the live picturium server"
+      }
+    ]
+  }
+}

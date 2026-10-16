@@ -5,10 +5,10 @@ description: Render pages from PDF, SVG, Office, and vector-art files, or return
 
 import DataTable from '../../components/DataTable.astro';
 
-picturium can rasterise document pages through the normal image pipeline or return a
-PDF or SVG document response. Use a raster [output format](/docs/output) when you want
-to resize, crop, filter, or watermark pages; use `f=pdf` or `f=svg` when you want a
-document rather than pixels.
+picturium can turn document pages into images through the normal pipeline, or give you
+back a PDF or SVG. Pick an image [output format](/docs/output) when you want to resize,
+crop, filter or watermark pages, and `f=pdf` or `f=svg` when you want a document instead
+of pixels.
 
 ```text
 /manual.pdf?page=3&w=1200&f=webp
@@ -18,82 +18,88 @@ document rather than pixels.
 ```
 
 <DataTable
-  head={['Source', 'Recognised extensions', 'Document output', 'Raster path']}
+  head={['Source', 'Recognised extensions', 'Document output', 'Image path']}
   cols={['k', '', 'd', '']}
   rows={[
-    ['PDF', 'pdf', 'f=pdf', 'Selected pages are loaded by libvips.'],
-    ['SVG', 'svg · svgz', 'f=svg or f=pdf', 'Loaded directly by libvips.'],
-    ['Writer', 'doc · docx · odt · docm · dotx · dotm', 'f=pdf', 'LibreOffice → PDF → libvips.'],
-    ['Presentation', 'ppt · pptx · odp · pptm · potx · potm', 'f=pdf', 'LibreOffice → PDF → libvips.'],
-    ['Spreadsheet', 'xls · xlsx · ods · xlsm · xltx · xltm · csv', 'f=pdf', 'LibreOffice → PDF → libvips.'],
-    ['Vector art', 'ai · cdr · cmx · cdt · eps', 'f=svg or f=pdf', 'Inkscape → PDF → libvips.'],
+    ['PDF', 'pdf', 'f=pdf', 'Pages loaded by libvips.'],
+    ['SVG', 'svg · svgz · svg.gz', 'f=svg or f=pdf', 'Loaded directly by libvips.'],
+    ['Text documents', 'doc · docx · odt · rtf · docm · dotx · dotm', 'f=pdf', 'LibreOffice → PDF → libvips.'],
+    ['Presentations', 'ppt · pptx · odp · pptm · potx · potm', 'f=pdf', 'LibreOffice → PDF → libvips.'],
+    ['Spreadsheets', 'xls · xlsx · ods · xlsm · xltx · xltm · csv', 'f=pdf', 'LibreOffice → PDF → libvips.'],
+    ['Vector art', 'ai · cdr · cmx · cdt · eps · dxf', 'f=svg or f=pdf', 'Inkscape → PDF → libvips.'],
   ]}
 />
 
-`f=svg` accepts only SVG and vector-art sources. `f=pdf` accepts PDF, SVG, Office,
-and vector-art sources. Other pairings return `415`. Document responses bypass sizing,
-cropping, filters, quality, metadata, watermarks, and raster output limits.
+`f=svg` only works for SVG and vector-art sources. `f=pdf` works for PDF, SVG, Office
+and vector-art sources. Anything else gets a `415`. Document responses skip sizing,
+cropping, filters, quality, metadata, watermarks and output limits.
 
 ## Page selection
 
-Use `page` or `pages` with one-based page numbers, comma-separated values, and ascending
-ranges. A selection may expand to at most 1000 entries.
+`page` or `pages` takes page numbers starting at 1, separated by commas, with optional
+ascending ranges. A selection can cover at most `pdf.max_pages` pages (`512` by default).
 
 ```text
 /manual.pdf?page=3
-/manual.pdf?pages=1,4-7,9&w=1200&f=webp
-/manual.pdf?pages=2-4&f=pdf
+/manual.pdf?pages=2-4&w=1200&f=webp
+/manual.pdf?pages=1,4-7,9&f=pdf
 ```
 
-`page=0`, descending ranges such as `7-4`, non-numeric values, and selections over the
-1000-entry cap are invalid. `thumb=page:...` remains available for compatibility, but
-the top-level parameter wins when both are present.
+`page=0`, backwards ranges like `7-4`, anything that isn't a number, and selections over
+`pdf.max_pages` pages are rejected with a `400`. The old `thumb=page:...` form still works, but the top-level
+parameter wins if you send both.
 
-For raster output, picturium loads the selected pages and runs the same
-[sizing](/docs/sizing), [cropping](/docs/cropping), [filters](/docs/filters), and
-[watermarking](/docs/watermarking) stages on each. Only WebP and GIF can retain several
-pages in one response; still-image formats return the first selected page. See
-[Animation & video](/docs/animation) for multi-frame output controls.
+When you render pages to an image, picturium loads everything from the lowest selected
+page to the highest. `pages=2,5` loads pages 2, 3, 4 and 5, so to get specific pages that
+aren't next to each other, use `f=pdf` or make one request per page. Every loaded page
+goes through [sizing](/docs/sizing), [cropping](/docs/cropping),
+[filters](/docs/filters) and [watermarking](/docs/watermarking) on its own. What you get
+back depends on the format:
 
-With `f=pdf`, omitting `page` returns the complete PDF. A selection creates a PDF
-containing the existing requested pages in document order; duplicates collapse and
-out-of-range values are ignored when at least one requested page exists. If none exists,
-the request returns `400`. PDF outlines pointing at removed pages are pruned.
+- WebP and GIF turn several pages into an animation, one page per frame. See
+  [Animation & video](/docs/animation) for timing and frame controls.
+- JPEG, PNG, AVIF and JXL stack the pages vertically into one tall image.
+
+With `f=pdf` and no `page`, you get the whole PDF. With a selection you get a new PDF
+containing exactly the requested pages that exist, in document order, with duplicates
+dropped. Pages past the end are ignored as long as at least one requested page exists;
+otherwise the request fails with `400`. Bookmarks pointing at removed pages are cleaned up.
 
 ## SVG
 
-SVG has three distinct paths:
+An SVG can take three routes:
 
-- `f=svg` returns an SVG source unchanged, or asks Inkscape for plain SVG from vector art.
-- `f=pdf` converts the SVG into a one-page vector PDF.
-- A raster format loads the SVG through libvips and applies the normal image pipeline.
+- `f=svg` returns the SVG as-is. For vector art, Inkscape converts it to plain SVG first.
+- `f=pdf` turns the SVG into a single-page vector PDF.
+- An image format renders the SVG with libvips and runs it through the normal pipeline.
 
-`style` supplies base64-encoded CSS to the SVG renderer. `dpi` defaults to
-`svg.load_dpi` (`72`). For raster output it controls load resolution; with `f=pdf` it
-sets the physical page scale, so doubling the DPI halves the page dimensions in PDF
-points while preserving the artwork.
+`style` passes base64-encoded CSS to the SVG renderer. `dpi` defaults to
+`svg.load_dpi` (`72`) and accepts `auto` or `1` to `3000`. For image output it sets the
+render resolution. With `f=pdf` it sets the physical page size instead: doubling the DPI
+halves the page size in PDF points, but the artwork stays the same.
 
-libvips normally refuses SVG inputs larger than 10 MB. Set `svg.unlimited=true` only
-for trusted large files. This guard belongs to the raster SVG loader; it is not a
-general request-size limit.
+libvips normally refuses SVG files over 10 MB. Only set `svg.unlimited=true` if you
+trust the files. This limit only applies when rendering SVGs to images; it isn't a
+general request size limit.
 
-SVG-to-PDF conversion accepts inline `data:` images. Local `<image href="...">` files
-are ignored unless `svg.allow_local_resources=true`. When enabled, relative references
-resolve beside the SVG but must remain inside `data.dir`; absolute paths and `..`
-traversal outside it are rejected. Leave the option off when files in the data directory
-belong to different tenants.
+When converting SVG to PDF, images embedded as `data:` URIs are included. Local
+`<image href="...">` files are left out unless you set `svg.allow_local_resources=true`.
+With that on, relative references are resolved next to the SVG but still have to stay
+inside `data.dir`, and absolute paths or `..` that escape it are rejected. If your data
+directory holds files for different tenants, leave this off.
 
-Referenced-file contents are deliberately absent from the generated-PDF cache key. Use
-`force=true` after changing one; the forced response skips cache reads and HTTP validator
-checks, regenerates the PDF, and replaces its cache entry. See
-[Caching & force](/docs/request-model#caching--force); cache deployment details are in
-[Configuration & operations](/docs/configuration#cache-tuning).
+Changes to referenced files don't invalidate the cached PDF, on purpose. After editing
+one, request the PDF with `force=true`: that skips the cache and HTTP validators,
+regenerates the PDF and replaces the cached copy. See
+[Caching & force](/docs/request-model#caching--force), and
+[Configuration & operations](/docs/configuration#cache-tuning) for cache setup.
 
 ## PDF
 
-A PDF raster request loads page 1 by default. Use `page` to choose pages and `dpi` to
-override `pdf.load_dpi` (`72`). Higher DPI gives the raster pipeline more source pixels;
-requested width and height still follow the regular [sizing rules](/docs/sizing).
+Rendering a PDF to an image uses page 1 unless you pick another with `page`. `dpi`
+overrides `pdf.load_dpi` (`72`); a higher DPI gives the pipeline more pixels to work with,
+but `w` and `h` still follow the usual [sizing rules](/docs/sizing). Pages are drawn on
+`pdf.background` (white by default), and a `bg` parameter overrides that.
 
 ```text
 /report.pdf?page=2&dpi=144&w=1400&f=webp
@@ -101,45 +107,77 @@ requested width and height still follow the regular [sizing rules](/docs/sizing)
 /report.pdf?pages=2,5-7&f=pdf&download=extract.pdf
 ```
 
-`f=pdf` without a page selection serves the original PDF. A subset is generated only
-when pages are selected. Use `download=` for a `Content-Disposition` filename; other
-response and cache headers follow [Output format & quality](/docs/output#delivery-download--original).
+### Limits
+
+Three settings keep a single PDF from tying up a worker:
+
+- `pdf.max_file_size` (`256` MiB): larger PDFs aren't rendered at all. picturium serves
+  the original file untouched instead.
+- `pdf.max_pages` (`512`): a larger page selection is rejected with a `400`.
+- `pdf.max_image_pixels` (`64` megapixels): if the first page, at the scale it would be
+  rendered at, is larger than this, the request fails with a `500`. A high `dpi` or a
+  large `w`/`h` on a big page is the usual cause.
+
+If the request has a `fallback`, picturium renders that instead in all three cases, with
+the same parameters. See [Errors & fallback](/docs/request-model#errors--fallback).
+
+```text
+/drawings/site-plan.pdf?w=800&f=webp&fallback=placeholders/document.png
+```
+
+`f=pdf` without a page selection serves the original file. A new PDF is only built when
+you select pages. Add `download=` to set a `Content-Disposition` filename; everything else
+about headers and caching works as described in
+[Output format & quality](/docs/output#delivery-download--original).
 
 ## Office documents
 
-Office sources require the `soffice` executable. picturium converts them headlessly to
-PDF, then either serves that PDF or rasterises its pages. A bare raster request converts
-page 1 first for a faster response and starts the full conversion for later requests;
-`f=pdf` without `page` needs the complete document.
+Office files need the `soffice` executable. picturium has LibreOffice convert them to
+PDF, then either serves that PDF or renders its pages. When you only need
+page 1 (no `page` parameter, or only page 1 selected), picturium converts just the first
+page for a quicker response and starts converting the full document for later requests.
+`f=pdf` without a `page` always waits for the whole document.
 
-`office.conversion_timeout` limits each conversion and defaults to 30 seconds. Completed
-first-page and full-document conversions share the normal memory and disk cache. Use
-`force=true` to regenerate and replace those cached intermediates.
+`office.conversion_timeout` (30 seconds by default) is how long a request waits for a
+conversion. If it runs out, the request fails but LibreOffice keeps going in the
+background, so the result is cached for the next request. `office.kill_timeout`
+(300 seconds by default) is the hard limit after which the conversion is killed. It can't
+be lower than `conversion_timeout`.
+
+`office.max_processes` caps how many LibreOffice processes run at once, background
+conversions included. Further conversions wait for a free slot, and the wait counts
+toward `conversion_timeout`. `0` (the default) means one process per logical CPU. Each
+process can use hundreds of MB of memory, so on machines with many cores and little
+RAM set a lower number.
+
+Finished first-page and full conversions are stored in the normal memory and disk cache.
+Use `force=true` to redo them and replace the cached copies.
 
 ## Vector art
 
-AI, CDR, CMX, CDT, and EPS sources require the `inkscape` executable. picturium exports
-the source's page area as PDF for raster or `f=pdf` output, and as plain SVG for
-`f=svg`. These formats normally produce one page.
+AI, CDR, CMX, CDT, EPS and DXF files need the `inkscape` executable. picturium exports
+them to PDF for image output and `f=pdf`, and to plain SVG for `f=svg`. The export uses
+the file's own page, except for DXF, which uses the drawing's bounds because Inkscape
+always imports DXF onto an A4 page. These formats usually produce a single page.
 
-`vector.conversion_timeout` defaults to 30 seconds. PDF and SVG conversions use separate
-cache entries; `force=true` regenerates and replaces them. Inkscape importer support
-varies by the file's producer and version, so test representative assets before relying
-on a format in production.
+`vector.conversion_timeout` defaults to 30 seconds. PDF and SVG conversions are cached
+separately, and `force=true` redoes and replaces them. How well Inkscape reads these
+files depends on which program and version created them, so try a few real files before
+relying on a format in production.
 
 ## Serving other files unchanged
 
-An unsupported file type returns `415` unless its extension appears in `data.serve`.
-The allowlist is case-insensitive and accepts entries with or without a leading dot.
-`*` serves every unsupported file, including extensionless files, so explicit extensions
-are safer.
+A file type picturium can't process gets a `415`, unless its extension is listed in
+`data.serve`. The list is case-insensitive and entries may start with a dot or not. `*`
+serves every unsupported file, including ones without an extension, so listing the
+extensions you actually need is safer.
 
 ```toml
 [data]
 serve = ["txt", "json", "zip"]
 ```
 
-Allowlisted files are returned unchanged; transformation parameters do not apply.
-`original=true` also returns any existing source unchanged and does not require its
-extension in `data.serve`. For the complete parameter and status-code tables, see the
+Allowlisted files come back untouched, with byte-range support; transform parameters
+don't apply. `original=true` also returns any existing file as-is, and doesn't need the
+extension to be in `data.serve`. The full parameter and status code tables are in the
 [Reference](/docs/reference).

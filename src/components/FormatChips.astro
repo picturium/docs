@@ -1,0 +1,56 @@
+---
+// Format families as labelled rows of chips. A chip starting with "+" is a
+// footnote ("+ macro & template variants") and renders without a box.
+interface Props { groups: [string, string[]][] }
+const { groups } = Astro.props;
+---
+<dl class="formats">
+  {groups.map(([label, items]) => (
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        <ul>
+          {items.map((f) => <li class:list={[f.startsWith('+') && 'more']}>{f}</li>)}
+        </ul>
+      </dd>
+    </div>
+  ))}
+</dl>
+
+<style>
+  .formats {
+    margin: 0 0 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+  }
+  .formats > div {
+    display: grid;
+    grid-template-columns: 9.5rem minmax(0, 1fr);
+    gap: 6px 16px;
+    padding: 11px 16px;
+  }
+  .formats > div + div { border-top: 1px solid var(--line-soft); }
+  dt {
+    padding-top: 3px;
+    font: 600 10.5px/1.6 var(--f-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  dd { margin: 0; }
+  /* .formats prefix outranks the doc page's own ul/li rules */
+  .formats ul { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .formats li {
+    padding: 1px 7px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--bg-2);
+    font: 12px/1.6 var(--f-mono);
+    color: var(--ink-1);
+  }
+  .formats li.more { border-color: transparent; background: none; color: var(--ink-3); }
+  @media (max-width: 560px) {
+    .formats > div { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

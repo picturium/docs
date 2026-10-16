@@ -1,0 +1,115 @@
+---
+title: Getting started
+description: Install picturium with the one-line installer or Docker, upgrade it, and transform your first image.
+---
+
+import DataTable from '../../components/DataTable.astro';
+
+picturium ships as a Docker image. It depends on a newer libvips than most package
+managers carry, and bundling it is the easiest way to get a build that just works. All you
+need is [Docker](https://docs.docker.com/engine/install/) with the `docker compose`
+plugin on a Linux or macOS host (amd64 or arm64).
+
+## Install
+
+```bash
+curl -fsSL https://picturium.cc/install.sh | sh
+```
+
+The installer asks a handful of questions. Press Enter to keep the default:
+
+- **Install directory**: where `compose.yaml` and `.env` go. Defaults to `~/picturium`, or `/opt/picturium` when you run it as root.
+- **Images directory**: the folder picturium serves. It's mounted read-only, and every file in it becomes available at the root of the URL.
+- **Port and listen address**: pick `127.0.0.1` if picturium will sit behind a reverse proxy.
+- **Signed URLs**: generates a secret and turns on [signature verification](/docs/request-model#signed-urls). Worth it for anything public.
+- **Health token**: generates a token that unlocks the detailed [`/health`](/docs/request-model#health--capacity) output.
+- **CORS origins** and **memory and disk cache sizes**.
+
+Then it pulls the latest release, starts the container, waits until it's healthy, and
+prints the URL along with any secrets it generated.
+
+Pass `-y` to skip the questions. Any answer can be preset with an environment variable:
+
+```bash
+curl -fsSL https://picturium.cc/install.sh | PICTURIUM_PORT=8080 PICTURIUM_DATA=/srv/media sh -s -- -y
+```
+
+<DataTable
+  head={['Variable', 'Default']}
+  cols={['k', 'd']}
+  rows={[
+    ['PICTURIUM_DIR', '~/picturium'],
+    ['PICTURIUM_DATA', '<install dir>/data'],
+    ['PICTURIUM_PORT', '20045'],
+    ['PICTURIUM_BIND', '0.0.0.0'],
+    ['PICTURIUM_VERSION', 'newest release'],
+  ]}
+/>
+
+The container runs as uid `1500`, so other users need read access to your images
+directory. If they don't have it, the installer tells you how to fix that.
+
+## Upgrade
+
+Run the same command again:
+
+```bash
+curl -fsSL https://picturium.cc/install.sh | sh
+```
+
+The installer spots the existing install, tells you which version you have and which is
+available, and asks before upgrading. Your configuration and secrets stay as they are. If
+you answer yes to **Change configuration?**, you get the same questions again, with your
+current values as the defaults.
+
+Each install is pinned to an exact version in `.env`, so nothing changes behind your
+back. To install a specific version, or roll back to one, set it explicitly:
+
+```bash
+curl -fsSL https://picturium.cc/install.sh | PICTURIUM_VERSION=0.2.0 sh
+```
+
+## Configure
+
+Settings live in `<install dir>/.env`. You can add any [config key](/docs/config-keys)
+there as `PICTURIUM__SECTION__KEY=value`, for example `PICTURIUM__WATERMARK__ENABLED=true`.
+The installer leaves keys you added yourself alone. Apply your changes with:
+
+```bash
+cd ~/picturium && docker compose up -d
+```
+
+A couple of other handy commands, run from the install directory:
+
+```bash
+docker compose logs -f     # follow the logs
+docker compose down -v     # uninstall and remove the cache volume
+```
+
+## Run with Docker manually
+
+You don't have to use the installer. Here's the same setup with plain Docker:
+
+```bash
+docker run -d --name picturium --restart unless-stopped \
+  -p 20045:20045 \
+  -v "$(pwd)/data:/app/data:ro" \
+  -v picturium-cache:/app/cache \
+  -e PICTURIUM__SERVER__LOG_LEVEL=info \
+  lamka02sk/picturium:0.2.0
+```
+
+Prefer a [config file](/docs/configuration#config-file) over environment variables? Mount
+it and point `PICTURIUM_CONFIG` at it:
+`-v "$(pwd)/config.toml:/app/config.toml" -e PICTURIUM_CONFIG=/app/config.toml`.
+
+## Your first request
+
+Drop an image into the images directory and ask for it with a few parameters:
+
+```
+http://localhost:20045/photo.jpg?w=800&h=600&fit=cover&f=webp
+```
+
+The path picks the file; the query string says what to do with it. The
+[request model](/docs/request-model) goes into the URL format, caching and signed URLs.

@@ -2,10 +2,28 @@
 import '../styles/global.css';
 import GitHubIcon from '../components/GitHubIcon.astro';
 import DocsSearch from '../components/DocsSearch.astro';
+import { Font } from 'astro:assets';
 import { VERSION, REPO, px } from '../consts';
 
-const { title, description } = Astro.props;
+const { title, description, ogType = 'website' } = Astro.props;
 const path = Astro.url.pathname;
+const canonical = new URL(path, Astro.site).href;
+// Social preview: picturium serving its own OG card, sized to the 1.91:1 slot.
+const ogImage = px('/picturium.png', 'w=1200&h=630&fit=contain&bg=0d1117&f=png');
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'picturium',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Linux',
+  softwareVersion: VERSION,
+  description,
+  url: new URL('/', Astro.site).href,
+  license: `${REPO}/blob/master/LICENSE`,
+  codeRepository: REPO,
+  programmingLanguage: 'Rust',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+};
 ---
 <!doctype html>
 <html lang="en">
@@ -14,12 +32,36 @@ const path = Astro.url.pathname;
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
+  <link rel="canonical" href={canonical} />
   <link rel="icon" href="/favicon.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=VT323&display=swap" rel="stylesheet" />
+  <link rel="sitemap" href="/sitemap-index.xml" />
+
+  <meta property="og:type" content={ogType} />
+  <meta property="og:site_name" content="picturium" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:url" content={canonical} />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:image" content={ogImage} />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="picturium — URL-driven image server written in Rust" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content={ogImage} />
+
+  <script type="application/ld+json" set:html={JSON.stringify(schema)} is:inline />
+  <!-- Preload only the two families in the first viewport; mono and pixel load
+       on demand rather than competing with them for bandwidth. -->
+  <Font cssVariable="--font-body" preload />
+  <Font cssVariable="--font-display" preload />
+  <Font cssVariable="--font-mono" />
+  <Font cssVariable="--font-pixel" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
   <!-- inline SVG defs for gradient strokes -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
@@ -39,7 +81,7 @@ const path = Astro.url.pathname;
       <a href="/" class="nav-brand">
         <img src={px('/picturium.png', 'w=288&f=webp&q=90')} alt="picturium" width="144" height="20" />
       </a>
-      <nav class="nav-links">
+      <nav class="nav-links" aria-label="Main">
         <a href="/" class={path === '/' ? 'active' : undefined}>Home</a>
         <a href="/docs" class={path.startsWith('/docs') ? 'active' : undefined}>Docs</a>
         <a href="/docs/reference">Reference</a>
@@ -75,21 +117,21 @@ const path = Astro.url.pathname;
 
   <footer class="footer">
     <div class="footer-brand">
-      <img src="/favicon.png" alt="picturium" width="30" height="30" />
-      <p>An open-source, URL-driven image server written in Rust and licensed under MIT.</p>
+      <img src={px('/picturium.png', 'w=288&f=webp&q=90')} alt="picturium" width="144" height="20" />
+      <p>A self-hosted image server written in Rust. Resize, convert and cache images straight from the URL. MIT licensed.</p>
     </div>
     <div>
-      <h5>Project</h5>
+      <h3>Project</h3>
       <ul>
         <li><a href="/docs">Documentation</a></li>
         <li><a href="/docs/reference">Quick reference</a></li>
         <li><a href="/#playground">Playground</a></li>
         <li><a href={`${REPO}/releases`} target="_blank" rel="noopener">Changelog</a></li>
-        <li><a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noopener">License</a></li>
+        <li><a href={`${REPO}/blob/master/LICENSE`} target="_blank" rel="noopener">License</a></li>
       </ul>
     </div>
     <div>
-      <h5>Community</h5>
+      <h3>Community</h3>
       <ul>
         <li><a href={REPO} target="_blank" rel="noopener">GitHub</a></li>
         <li><a href={`${REPO}/issues`} target="_blank" rel="noopener">Issues</a></li>
@@ -97,7 +139,7 @@ const path = Astro.url.pathname;
       </ul>
     </div>
     <div>
-      <h5>Related</h5>
+      <h3>Related</h3>
       <ul>
         <li><a href="https://www.libvips.org/" target="_blank" rel="noopener">libvips</a></li>
         <li><a href="https://github.com/tokio-rs/axum" target="_blank" rel="noopener">axum</a></li>

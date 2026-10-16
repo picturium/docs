@@ -1,0 +1,23 @@
+name: Docs issue
+description: Something on the docs site is wrong, unclear, missing, or broken.
+labels: [docs]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: What's wrong or missing, and what would be better. A page URL helps if you have one.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - Incorrect / out of date
+        - Unclear or confusing
+        - Missing content
+        - Broken link or example
+        - Something else
+    validations:
+      required: false

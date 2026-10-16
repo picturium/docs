@@ -10,12 +10,12 @@ monoHeadings: true
 import DataTable from '../../components/DataTable.astro';
 import { rows, curveCols, curves, encoderRows } from '../../data/config-keys';
 
-export const keyTable = (id) => <DataTable head={['Key', 'Type / values', 'Default', 'What it does']} rows={rows(id)} cols={['k', '', 'd', '']} />
+export const keyTable = (id) => <DataTable id={id} head={['Key', 'Type / values', 'Default', 'What it does']} rows={rows(id)} cols={['k', '', 'd', '']} />
 
-Look up every key in `config.toml`, including its type, default, and purpose. Every key is
-optional, and you can run picturium without a config file. The
-[Configuration & operations](/docs/configuration) page explains loading, cache sizing,
-concurrency, CORS, and logs. Request-time signing, validators, cache busting, and capacity
+Every key in `config.toml`, with its type, default and what it does. All of them are
+optional, and picturium runs fine without a config file at all.
+[Configuration & operations](/docs/configuration) explains how config is loaded and how to
+size caches, concurrency, CORS and logs. Signing, validators, cache busting and capacity
 are covered in the [Request model](/docs/request-model).
 
 - To use an environment variable, uppercase the key, add the `PICTURIUM__` prefix, and put `__` between levels. For example, `output.encoder.avif.bitdepth` becomes `PICTURIUM__OUTPUT__ENCODER__AVIF__BITDEPTH`. Environment variables override the file.

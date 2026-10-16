@@ -23,10 +23,11 @@ export const cacheKeys = [
   ['cache.dir', '"cache"', 'Directory used by the disk cache. Only one picturium process can use it at a time.'],
   ['cache.cache_control', '"public, max-age=604800, must-revalidate"', 'Sent verbatim on every 200. A force=true response sends no-store instead.'],
   ['cache.memory.enabled', 'true', 'Checks the memory cache before the disk cache.'],
-  ['cache.memory.capacity', '1000', 'Maximum number of entries in memory. This is an entry count, not a byte limit.'],
+  ['cache.memory.limit', '256', 'MiB of total memory held by the memory cache. Entries are charged their own size.'],
   ['cache.memory.entry_limit', '2', 'MiB. A render larger than this skips memory: to disk if enabled, otherwise served uncached.'],
   ['cache.disk.enabled', 'true', 'Enables the disk cache and locks its directory for this process.'],
   ['cache.disk.limit', '1024', 'MiB of effective capacity, shared by finished responses and Office / SVG / video intermediates. foyer evicts and reclaims automatically.'],
+  ['cache.disk.entry_limit', '16', 'MiB. Largest single response written to disk, and foyer\'s block size — the unit it reclaims in.'],
 ];
 
 export const concurrencyKeys = [
@@ -38,7 +39,7 @@ export const concurrencyKeys = [
 export const corsLogKeys = [
   ['cors.allowed_origins', '["*"]', 'Use "*" to allow every origin, method, and header. Otherwise, list each allowed origin exactly. Invalid entries are ignored.'],
   ['server.log_level', '"debug"', 'Sets log detail to debug, info, warn, or error. RUST_LOG overrides this value when set.'],
-  ['vips.debug', 'false', 'Enables libvips leak checks and memory tracking. Use it only for diagnostics because it adds overhead.'],
+  ['vips.debug', 'false', 'Turns on libvips leak checking and prints the objects still alive at shutdown. Diagnostics only; it adds overhead.'],
 ];
 
 export const health = [

@@ -3,29 +3,58 @@ title: Quick reference
 description: Look up picturium URL parameters, formats, status codes, and common configuration keys on one page.
 ---
 
-import DataTable from '../../components/DataTable.astro';
-import { params, crop, filter, anim, watermark, limit, status, config } from '../../data/reference';
+import ParamList from '../../components/ParamList.astro';
+import ParamFilter from '../../components/ParamFilter.astro';
+import UrlAnatomy from '../../components/UrlAnatomy.astro';
+import StatusCodes from '../../components/StatusCodes.astro';
+import FormatChips from '../../components/FormatChips.astro';
+import { params, crop, filter, anim, watermark, limit, status, inputFormats, outputFormats } from '../../data/reference';
 
-Look up every URL parameter, format, and status code in one place. A request is
-`GET /<path-under-data-dir>?<params>` and the response is the transformed file,
-which picturium caches from the source and effective parameters. See the
-[Request model](/docs/request-model) for URL signing, server and HTTP caching, fallbacks,
-errors, and capacity.
+Every URL parameter, format and status code on one page. A request is
+`GET /<path-under-data-dir>?<params>` and the response is the transformed file. The
+[Request model](/docs/request-model) covers signing, caching, fallbacks, errors and
+capacity in more detail.
 
-Using PHP? The [official PHP library](/docs/php-library) provides typed builders for
-every parameter, signed URLs, responsive `srcset`, and `<picture>` markup.
+Working in PHP? The [official PHP library](/docs/php-library) gives you typed builders
+for every parameter, signed URLs, responsive `srcset` and `<picture>` markup.
 
 ## Request shape
 
+<UrlAnatomy />
+
 - The path selects the file. The query string describes the transforms.
-- Named values are case-insensitive everywhere (`g=Center` = `g=center`).
+- Named values are case-insensitive (`g=Center` = `g=center`).
 - Most parameters have interchangeable short and long names (`w` = `width`). Sub-parameter keys are case-sensitive.
 - Grouped parameters use `key:value` pairs joined by `|` — e.g. `crop=w:400|h:300|g:attention`.
-- picturium serves a non-image file unchanged only when its extension appears in `data.serve`. Otherwise it returns `415`.
+- A file picturium can't process is served unchanged only if its extension is in `data.serve`. Otherwise you get `415`.
 
 ## URL parameters
 
-<DataTable head={['Parameter', 'Values', 'Default', 'Notes']} rows={params} cols={['k', '', 'd', '']} />
+<ParamFilter />
+
+### Size & fit
+
+<ParamList id="param" filterable rows={params.size} />
+
+### Canvas & orientation
+
+<ParamList id="param" filterable rows={params.canvas} />
+
+### Format & quality
+
+<ParamList id="param" filterable rows={params.output} />
+
+### Documents & video
+
+<ParamList id="param" filterable rows={params.documents} />
+
+### Crop, effects & limits
+
+<ParamList id="param" filterable rows={params.grouped} />
+
+### Cache & delivery
+
+<ParamList id="param" filterable rows={params.delivery} />
 
 ## Grouped parameters
 
@@ -36,7 +65,7 @@ fitting, or padding. Out-of-bounds areas are clamped instead of rejected. Smart 
 (`g=attention` or `g=entropy`) ignores `x` and `y`. Cropping is skipped for `f=pdf`,
 `f=svg`, and `original`.
 
-<DataTable head={['Key', 'Value', 'Default']} rows={crop} cols={['k', '', 'd']} />
+<ParamList id="crop" rows={crop} />
 
 See [Cropping](/docs/cropping) for region sizing, gravity, offsets, smart crop, and
 worked examples.
@@ -45,7 +74,7 @@ worked examples.
 
 Combine several effects in one value: `filter=brightness:1.1|contrast:1.2|blur:2`.
 
-<DataTable head={['Key', 'Type', 'Default', 'Range']} rows={filter} cols={['k', '', 'd', '']} />
+<ParamList id="filter" rows={filter} />
 
 See [Filters & effects](/docs/filters) for composition order, examples, palettes, and
 animation behaviour.
@@ -57,7 +86,7 @@ Animated GIF, WebP, AVIF, HEIC, and multi-page TIFF sources keep their animation
 `false`, `no`, or `0`) to return only the first frame. For video, `anim` extracts a clip:
 `t` sets the start and `frames` sets its length.
 
-<DataTable head={['Key', 'Type', 'Default', 'Notes']} rows={anim} cols={['k', '', 'd', '']} />
+<ParamList id="anim" rows={anim} />
 
 See [Animation & video](/docs/animation) for output-format behaviour, frame selection,
 video clip defaults, examples, and processing costs.
@@ -68,14 +97,14 @@ Each key falls back to its `[watermark]` configuration value. Use `watermark=fal
 disable it for one request. Watermarks are skipped for `f=pdf`, `f=svg`, and `original`;
 otherwise they appear on every frame and document page. `dpr` scales `pad`, `scale`, and `size`.
 
-<DataTable head={['Key', 'Value', 'Default', 'Notes']} rows={watermark} cols={['k', '', 'd', '']} />
+<ParamList id="watermark" rows={watermark} />
 
 See [Watermarking](/docs/watermarking) for source precedence, path safety, placement,
 configuration, and worked examples.
 
 ### `limit` · `limits`
 
-<DataTable head={['Key', 'Value', 'Default', 'Notes']} rows={limit} cols={['k', '', 'd', '']} />
+<ParamList id="limit" rows={limit} />
 
 ### `thumb` · `thumbnail`
 
@@ -87,11 +116,13 @@ are present.
 
 ### Input
 
-<p class="fmt">jpeg · png · tiff · webp · gif · heif/heic · jxl · jp2k · ico · bmp · psd · svg/svgz · eps · ai · cdr/cmx/cdt · pdf · office (doc/docx, ppt/pptx, xls/xlsx) · raw (raf, rw2, pef, orf, nrw, nef, dng, cr2, cr3, crw, arw) · video (mp4, webm, mkv, avi, av1, 3gp, m4v, flv, mov, mpeg, mts, hevc)</p>
+<FormatChips groups={inputFormats} />
 
 ### Output
 
-<p class="fmt">jpeg · webp · png · gif · avif · jxl &nbsp;—&nbsp; plus <strong>pdf</strong> and <strong>svg</strong> document passthrough (the document itself is served).</p>
+<FormatChips groups={outputFormats} />
+
+`pdf` and `svg` are document passthrough: the document itself is served.
 
 - `f=auto` picks the first entry of `output.format_priority` the client accepts, falling back to `webp`. `gif` is not in the default priority, so `auto` never picks it.
 - Only `webp` and `gif` output can hold an animation; every other format gets the first frame.
@@ -102,7 +133,7 @@ options, metadata, limits, and download behaviour.
 
 ## HTTP status codes
 
-<DataTable head={['Code', '', 'When']} rows={status} cols={['k', 'd', '']} />
+<StatusCodes rows={status} />
 
 ## Response headers to check
 
@@ -115,8 +146,8 @@ options, metadata, limits, and download behaviour.
 See [HTTP caching](/docs/request-model#http-caching) for validator precedence and the
 difference between `cache=` and `force=true`.
 
-`GET /health` returns JSON with `status` (healthy / warning / unhealthy), worker and queue
-counts. Its thresholds and HTTP behaviour are in
+`GET /health` returns JSON with a `status` (healthy / warning / unhealthy). Worker and queue
+counts and memory statistics are only added with a valid `security.health_token`. Thresholds and HTTP behaviour are in
 [Health & capacity](/docs/request-model#health--capacity).
 
 ## Configuration
@@ -124,7 +155,61 @@ counts. Its thresholds and HTTP behaviour are in
 - File `config.toml` (or the path in `PICTURIUM_CONFIG`). Every key is optional; an *unknown* key refuses to boot.
 - Any key can be an env var: `PICTURIUM__SECTION__KEY`, `__` between levels, list values comma-separated. E.g. `PICTURIUM__SERVER__PORT=8080`.
 
-<DataTable head={['Key', 'Default']} rows={config} cols={['k', 'd']} />
+```toml
+# config.toml with every default below. Copy only the keys you change.
+[server]
+host = "0.0.0.0"
+port = 20045
+workers = 0               # 0 = 2× CPUs
+queue_size = 100
+log_level = "debug"
+
+[security]
+signature_enabled = false
+signature_secret = ""
+
+[cors]
+allowed_origins = ["*"]   # permissive
+
+[data]
+dir = "data"              # stripped from the URL
+serve = []                # ["*"] serves any file as-is
+
+[cache]
+dir = "cache"             # one process per dir
+cache_control = "public, max-age=604800, must-revalidate"
+
+[cache.memory]
+limit = 256               # MiB
+
+[cache.disk]
+limit = 1024              # MiB
+
+[image]
+fit = "cover"
+gravity = "center"
+upsize = false
+auto_rotate = true
+resample = "lanczos3"
+extend = "bg"
+
+[output]
+quality = "medium"
+format_priority = ["jxl", "avif", "webp", "jpeg", "png"]
+metadata = ["none"]
+max_width = 5000          # 0 = unlimited
+max_height = 5000         # 0 = unlimited
+max_size = "0"            # 0 = unlimited
+
+[watermark]
+enabled = false
+
+[video]
+default_time = "1"
+
+[svg]
+allow_local_resources = false
+```
 
 See the [config key reference](/docs/config-keys) for every key and its explanation. The
 repository also includes `config.toml.example` with the same defaults and inline comments.

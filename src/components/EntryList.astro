@@ -1,0 +1,217 @@
+---
+// The docs' one list-of-things layout, used instead of tables: the key on the left,
+// then its values, labelled facts and a note. ParamList (quick reference) and
+// DataTable (every other page) both build entries and render them here.
+// A value containing ' · ' renders as pills. `def` marks the matching pill as the
+// default, or shows up as a labelled field if no pill matches.
+export interface Entry {
+  key: string;               // 'w · width': first name, then aliases
+  anchor?: string;
+  href?: string;             // where the name links; defaults to its own anchor
+  values?: string;
+  def?: string;
+  defLabel?: string;
+  fields?: [string, string, boolean?][]; // [label, value, prose?]; prose is plain text, not code
+  note?: string;
+  noteLabel?: string;        // set when the note is one side of a comparison
+  mono?: boolean;            // the note is code (method lists, cases), not prose
+}
+
+interface Props {
+  entries: Entry[];
+  filterable?: boolean;
+  class?: string;
+}
+const { entries, filterable = false, class: extra } = Astro.props;
+
+const blank = (v?: string) => v === undefined || v === '' || v === '—';
+const items = entries.map((e) => {
+  const [name, ...aliases] = e.key.split(' · ');
+  const pills = e.values === 'bool' ? ['true', 'false'] : e.values?.split(' · ');
+  const enumerated = !!pills && pills.length > 1;
+  // "center (image.crop_gravity)" still marks the center pill
+  const defPill = enumerated && !blank(e.def) ? pills!.find((p) => e.def === p || e.def!.startsWith(`${p} `)) : undefined;
+  const fields = [...(e.fields ?? [])];
+  if (!blank(e.def) && e.def !== defPill) fields.unshift([e.defLabel ?? 'default', e.def!]);
+  const shown = fields.filter(([, v]) => !blank(v));
+  // a sentence reads badly squeezed into the meta row; it gets its own line
+  const long = ([, v, prose]: [string, string, boolean?]) => !!prose && v.length > 40;
+  return {
+    ...e, name, aliases, pills, enumerated, defPill,
+    fields: shown.filter((f) => !long(f)),
+    paras: shown.filter(long),
+    href: e.href ?? (e.anchor ? `#${e.anchor}` : undefined),
+    search: [e.key, e.values, ...fields.map(([, v]) => v), e.note].filter(Boolean).join(' ').toLowerCase(),
+  };
+});
+// long keys (env vars, URL fragments) get the full width instead of a squeezed column
+const stacked = Math.max(...items.map((i) => i.name.length)) > 20;
+// nothing but names (method ↔ alias lists): wrap them as chips instead of rows
+const keysOnly = items.every((i) => !i.pills && !i.fields.length && !i.paras.length && !i.note);
+const list = (v: string) => v.split(' · ');
+---
+<div class:list={['entries', stacked && 'is-stacked', keysOnly && 'is-keys', extra]} data-filterable={filterable ? '' : undefined}>
+  {items.map((e) => (
+    <article class="entry" id={e.anchor} data-names={e.key.toLowerCase()} data-search={e.search}>
+      <div class="entry-head">
+        {e.href ? <a class="entry-name" href={e.href}>{e.name}</a> : <span class="entry-name">{e.name}</span>}
+        {e.aliases.map((a) => <span class="entry-alias">{a}</span>)}
+      </div>
+      <div class="entry-body">
+        {(e.pills || e.fields.length > 0) && (
+          <div class="entry-meta">
+            {e.pills && (e.enumerated ? (
+              <ul class="pills" aria-label="Values">
+                {e.pills.map((p) => (
+                  <li class:list={[p === e.defPill && 'is-default']}>{p}{p === e.defPill && <span class="def-tag">default</span>}</li>
+                ))}
+              </ul>
+            ) : (
+              <code class="entry-type">{e.values}</code>
+            ))}
+            {e.fields.map(([label, v, prose]) => (
+              <span class="entry-field">
+                <span class="entry-label">{label}</span>
+                {v.includes(' · ') ? <ul class="pills">{list(v).map((p) => <li>{p}</li>)}</ul> : prose ? <span class="entry-text">{v}</span> : <code>{v}</code>}
+              </span>
+            ))}
+          </div>
+        )}
+        {e.paras.map(([label, v]) => <p class="entry-note"><span class="entry-label">{label}</span> {v}</p>)}
+        {e.note && <p class:list={['entry-note', e.mono && 'is-mono']}>{e.noteLabel && <><span class="entry-label">{e.noteLabel}</span> </>}{e.note}</p>}
+      </div>
+    </article>
+  ))}
+</div>
+
+<style>
+  .entries {
+    container-type: inline-size;
+    margin: 0 0 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+    overflow: hidden;
+  }
+  /* the doc page puts list spacing above every block that follows a list */
+  :global(.ref-main ul) + .entries { margin-top: 14px; }
+  .entry {
+    display: grid;
+    grid-template-columns: 10.5rem minmax(0, 1fr);
+    gap: 6px 20px;
+    padding: 13px 16px;
+    border-top: 1px solid var(--line-soft);
+    scroll-margin-top: var(--toc-offset, 80px);
+    transition: background 0.15s;
+  }
+  .is-stacked .entry { grid-template-columns: minmax(0, 1fr); }
+  .entry:first-child { border-top: 0; }
+  .entry:hover { background: var(--bg-2); }
+  .entry[hidden], .entries[hidden] { display: none; }
+  .entry:target {
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-1));
+    box-shadow: inset 3px 0 var(--accent);
+    animation: entry-arrive 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes entry-arrive {
+    from { background: color-mix(in srgb, var(--accent) 22%, var(--bg-1)); }
+  }
+
+  .entry-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    align-content: start;
+    gap: 2px 8px;
+    min-width: 0;
+  }
+  .entry-name {
+    font: 600 13.5px/1.5 var(--f-mono);
+    color: var(--ink-0);
+    border-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+  a.entry-name:hover { color: var(--accent); }
+  .entry-alias { font: 12px/1.5 var(--f-mono); color: var(--ink-3); }
+
+  .entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+  .pills {
+    display: flex;
+    /* the doc page stacks every ul as a column */
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pills li {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 1px 7px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--bg-2);
+    font: 11.5px/1.6 var(--f-mono);
+    color: var(--ink-1);
+  }
+  .pills li.is-default {
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-2));
+    color: var(--ink-0);
+  }
+  .def-tag {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .entry-type {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: 12px/1.6 var(--f-mono);
+    color: var(--ink-1);
+    overflow-wrap: anywhere;
+  }
+  .entry-field {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 7px;
+    min-width: 0;
+  }
+  .entry-label {
+    font: 600 10px/1.6 var(--f-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .entry-text { font-size: 13px; color: var(--ink-1); }
+  .entry-note .entry-label { margin-right: 4px; }
+  .entry-field code { font-size: 11.5px; color: var(--ink-1); overflow-wrap: anywhere; }
+  .entry-note {
+    margin: 6px 0 0;
+    max-width: 75ch;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+  .entry-meta:empty + .entry-note, .entry-body > .entry-note:first-child { margin-top: 0; }
+  .entry-note.is-mono { font: 12px/1.7 var(--f-mono); color: var(--ink-1); }
+
+  .is-keys { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; }
+  .is-keys .entry {
+    display: flex;
+    padding: 3px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-2);
+  }
+  .is-keys .entry-body { display: none; }
+
+  @container (max-width: 34rem) {
+    .entry { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

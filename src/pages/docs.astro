@@ -10,8 +10,8 @@ const groups = DOC_GROUPS.map((g) => ({
   cats: DOCS_NAV.filter((c) => c.group === g.slug).map((c) => ({ ...c, index: ++n })),
 }));
 ---
-<Base title="picturium — docs" description="Learn how to install, configure, and use picturium.">
-  <main class="docs-home">
+<Base title="Documentation · picturium" description="Learn how to install, configure, and use picturium — the URL-driven image and media processing server written in Rust.">
+  <main id="main" class="docs-home">
     <div class="bg-layer bg-grid"></div>
 
     <header class="docs-head">

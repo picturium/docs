@@ -1,0 +1,42 @@
+---
+// Status codes as badges coloured by class: 2xx green, 3xx cyan, 4xx yellow, 5xx red.
+interface Props { rows: string[][] }
+const { rows } = Astro.props;
+const tone: Record<string, string> = { '2': 'var(--px-green)', '3': 'var(--px-cyan)', '4': 'var(--px-yellow)', '5': 'var(--px-red)' };
+---
+<div class="status">
+  {rows.map(([code, meaning, when]) => (
+    <article class="st" id={`status-${code}`} style={`--c:${tone[code[0]]}`}>
+      <span class="st-code">{code}</span>
+      <div>
+        <strong>{meaning}</strong>
+        <p>{when}</p>
+      </div>
+    </article>
+  ))}
+</div>
+
+<style>
+  .status {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+    gap: 8px;
+    margin: 0 0 14px;
+  }
+  .st {
+    display: flex;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    background: var(--bg-1);
+    scroll-margin-top: var(--toc-offset, 80px);
+  }
+  .st-code {
+    flex: none;
+    font: 30px/1 var(--f-pixel);
+    color: var(--c);
+  }
+  .st strong { font: 600 14px/1.4 var(--f-display); color: var(--ink-0); }
+  .st p { margin: 4px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+</style>

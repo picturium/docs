@@ -14,7 +14,7 @@ export const groups: Group[] = [
     rows: [
       ['log_level', 'debug · info · warn · error', '"debug"', 'Controls log detail. RUST_LOG overrides this value when set.'],
       ['host', 'IP or hostname', '"0.0.0.0"', 'Address used by the HTTP listener. 0.0.0.0 accepts connections on every network interface.'],
-      ['port', '1–65535', '20046', 'TCP port the listener binds to.'],
+      ['port', '1–65535', '20045', 'TCP port the listener binds to.'],
       ['workers', 'integer ≥ 0', '0', 'Maximum number of images rendered at once. 0 means twice the logical CPU count.'],
       ['queue_size', 'integer ≥ 0', '100', 'Maximum number of requests waiting for a worker. A full queue rejects new requests with 503.'],
     ],
@@ -25,6 +25,7 @@ export const groups: Group[] = [
     rows: [
       ['signature_enabled', 'bool', 'false', 'Requires every request to include a valid HMAC token for its path and query. When false, requests do not need a signature.'],
       ['signature_secret', 'string', '""', 'Shared secret used for HMAC-SHA256 signatures. Generate one with openssl rand -hex 48. Used only when signature_enabled is true.'],
+      ['health_token', 'string', '""', 'Bearer token that unlocks details on GET /health (version, worker and queue counts, memory statistics) when sent as Authorization: Bearer <token> or as ?token=<token>. The query form ends up in access logs, so prefer the header. Without a token /health returns only the status; a wrong token gets 401. Empty disables the details.'],
     ],
   },
   {
@@ -38,7 +39,7 @@ export const groups: Group[] = [
     id: 'vips',
     title: '[vips]',
     rows: [
-      ['debug', 'bool', 'false', 'Enables libvips leak checks and memory reporting. Use only for diagnostics because it adds overhead.'],
+      ['debug', 'bool', 'false', 'Turns on libvips leak checking and prints the objects still alive at shutdown. Diagnostics only; it adds overhead.'],
       ['concurrency', 'integer', '1', 'Threads libvips may use inside a single operation. Total threads ≈ server.workers × vips.concurrency.'],
     ],
   },
@@ -58,10 +59,11 @@ export const groups: Group[] = [
       ['dir', 'path', '"cache"', 'Directory used by the disk cache. Only one running process can use it at a time.'],
       ['cache_control', 'header value', '"public, max-age=604800, must-revalidate"', 'Sent verbatim as Cache-Control on every successful response. A force=true response sends no-store instead.'],
       ['memory.enabled', 'bool', 'true', 'Enables the memory cache, which is checked before disk.'],
-      ['memory.capacity', 'integer > 0', '1000', 'Maximum number of entries held in memory — a count, not a byte budget.'],
+      ['memory.limit', 'MiB > 0', '256', 'Total memory budget for the memory tier. Each entry is charged its own size.'],
       ['memory.entry_limit', 'MiB > 0', '2', 'Largest single response kept in memory. Bigger renders fall through to disk, or are served uncached.'],
       ['disk.enabled', 'bool', 'true', 'Enables the disk cache and locks the cache directory for this process.'],
-      ['disk.limit', 'MiB > 0', '1024', 'Effective on-disk capacity, shared by finished responses and Office / SVG / video intermediates. foyer evicts and reclaims automatically; a single entry is capped just under 16 MiB.'],
+      ['disk.limit', 'MiB > 0', '1024', 'Effective on-disk capacity, shared by finished responses and Office / SVG / video intermediates. foyer evicts and reclaims automatically.'],
+      ['disk.entry_limit', 'MiB > 0', '16', 'Largest single response written to disk. Also foyer\'s block size, the unit it reclaims in. Changing it discards the existing disk cache.'],
     ],
   },
   {
@@ -78,6 +80,10 @@ export const groups: Group[] = [
     title: '[pdf]',
     rows: [
       ['load_dpi', 'integer', '72', 'Resolution a PDF page is rasterised at when the request gives no dpi.'],
+      ['background', 'colour, same syntax as bg', '"white"', 'Colour behind PDF and Office pages when they are rasterised. A bg parameter on the request wins. Must parse as a colour or startup fails.'],
+      ['max_file_size', 'MiB', '256', 'PDFs larger than this are not rendered. The original file is served as-is instead, or the fallback is rendered when the request has one.'],
+      ['max_pages', 'integer, 1–65535', '512', 'Most pages one request may select with page / pages. Larger selections get a 400, or the fallback when the request has one. Applies to PDF, Office and vector-art sources; animated images are not limited by it.'],
+      ['max_image_pixels', 'megapixels', '64', 'Refuses to render a PDF when its first page, at the resolved render scale, would exceed this many pixels. The request fails with a 500, or renders the fallback when the request has one.'],
     ],
   },
   {
@@ -85,13 +91,15 @@ export const groups: Group[] = [
     title: '[office]',
     rows: [
       ['conversion_timeout', 'seconds', '30', 'How long LibreOffice may take to convert one document before the request fails.'],
+      ['kill_timeout', 'seconds', '300', 'Hard limit for one LibreOffice run. A conversion that outlives conversion_timeout keeps going in the background to fill the cache until this limit kills it. Must not be lower than conversion_timeout.'],
+      ['max_processes', 'integer ≥ 0', '0', 'Maximum number of LibreOffice processes running at once, background conversions included. Further conversions wait for a free slot. 0 means the logical CPU count.'],
     ],
   },
   {
     id: 'vector',
     title: '[vector]',
     rows: [
-      ['conversion_timeout', 'seconds', '30', 'How long Inkscape may take to convert one .ai / .cdr / .cmx / .cdt / .eps source before the request fails.'],
+      ['conversion_timeout', 'seconds', '30', 'How long Inkscape may take to convert one .ai / .cdr / .cmx / .cdt / .eps / .dxf source before the request fails.'],
     ],
   },
   {

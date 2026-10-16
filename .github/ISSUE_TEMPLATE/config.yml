@@ -1,0 +1,6 @@
+# Blank issues stay enabled so a quick note is never blocked by the form.
+blank_issues_enabled: true
+contact_links:
+  - name: picturium server bug or feature request
+    url: https://github.com/picturium/picturium/issues
+    about: This repo is only the documentation website. Report picturium itself over here.

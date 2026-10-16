@@ -5,22 +5,23 @@ description: Generate signed picturium URLs, responsive srcsets, and img or pict
 
 import DataTable from '../../components/DataTable.astro';
 
-The official PHP client generates signed URLs, `srcset` values, and complete
-`<img>` or `<picture>` elements. It is framework-independent, has no runtime
-dependencies, and requires PHP 8.4 or newer.
+The official PHP client builds signed URLs, `srcset` values and complete `<img>` or
+`<picture>` elements for you. It works with any framework (and ships optional
+[Laravel](#laravel) and [Symfony](#symfony) bridges), has no runtime dependencies, and
+needs PHP 8.4 or newer.
 
 ```bash
 composer require lamka02sk/picturium
 ```
 
-The client only produces strings and arrays; it does not send image requests. Use it
-from plain PHP or templates such as Blade, Twig, and Latte.
+It only produces strings and arrays and never talks to the server itself, so you can use
+it from plain PHP or from templates like Blade, Twig and Latte.
 
 ## Configure
 
-Register the server during application bootstrap. The secret must match
-`security.signature_secret`; omit it when [signed URLs](/docs/request-model#signed-urls)
-are disabled.
+Register your server once while the app boots. The secret has to match
+`security.signature_secret`; leave it out if [signed URLs](/docs/request-model#signed-urls)
+are off.
 
 ```php
 use Picturium\Enum\Format;
@@ -34,10 +35,10 @@ Picturium::configure(
 );
 ```
 
-`defaults` is an optional `Image` prototype copied to every image and picture. Setters
-return clones, so derived images do not change it.
+`defaults` is an optional `Image` that every image and picture starts from. Setters
+return copies, so nothing you do later changes it.
 
-Register named servers or inject a normal object when needed:
+You can also register named servers, or skip the static registry and use an instance:
 
 ```php
 Picturium::configure(url: 'https://cdn.example.com', secret: '...', name: 'cdn');
@@ -52,7 +53,8 @@ $picturium->image('a.jpg')->width(400)->src();
 
 ## Images and output layers
 
-Import the namespaced helpers; they cannot collide with global application functions.
+Import the namespaced helpers. Because they live in a namespace, they can't clash with
+functions in your app.
 
 ```php
 use function Picturium\{img, picture};
@@ -67,8 +69,8 @@ $image->attrs();        // escaped attribute string
 $image->toHtml();       // complete <img> element
 ```
 
-Casting renders the complete element. Call `src()` when already inside a `src`
-attribute; otherwise the whole `<img>` would be inserted there.
+Casting to a string renders the whole element. Inside an existing `src` attribute, call
+`src()` instead, or you'll end up with an `<img>` inside your `<img>`.
 
 ```php
 <?= img($product->photo)->width(400)->alt($product->name)->lazy() ?>
@@ -76,11 +78,11 @@ attribute; otherwise the whole `<img>` would be inserted there.
 <img src="<?= img('a.jpg')->width(400)->src() ?>">
 ```
 
-`attributes()` is unescaped for framework bridges. `attrs()` and `toHtml()` escape HTML.
-Intrinsic `width` and `height` appear only when both are known, or one can be derived
-from an aspect ratio. They are CSS pixels and are not multiplied by DPR.
+`attributes()` returns raw values for framework integrations; `attrs()` and `toHtml()`
+escape them. The `width` and `height` attributes are only added when both are known, or
+one can be worked out from an aspect ratio. They're CSS pixels, not multiplied by DPR.
 
-Bare global helpers are opt-in; namespaced imports are preferred:
+If you really want global helpers without a namespace, you can opt in:
 
 ```php
 require 'vendor/lamka02sk/picturium/src/globals.php';
@@ -88,16 +90,16 @@ require 'vendor/lamka02sk/picturium/src/globals.php';
 
 ## Responsive images
 
-A DPR list generates `x` descriptors. The CSS width stays fixed while picturium
-multiplies the render size by each `dpr` value.
+Give `dpr` a list and you get `x` descriptors. The CSS width stays the same while
+picturium renders each candidate at that multiple.
 
 ```php
 img('a.jpg')->width(400)->dpr([1, 2])->srcset();
 // ...?dpr=1&w=400... 1x, ...?dpr=2&w=400... 2x
 ```
 
-The client does not guess layout-dependent `w` descriptors. Use a picture for different
-breakpoint sizes, crops, or formats:
+The client doesn't try to guess `w` descriptors, since those depend on your layout. For
+different sizes, crops or formats per breakpoint, use a picture:
 
 ```php
 use Picturium\Enum\Format;
@@ -112,10 +114,10 @@ echo picture('hero.jpg')
     ->alt('Hero');
 ```
 
-Picture parameters are shared by every `<source>` and the fallback `<img>`. The closure
-receives an independent `Image`; it runs when output is produced and may run more than
-once, so keep it free of side effects. Sources retain array order, and the browser uses
-the first matching `media` and `type`.
+Parameters set on the picture apply to every `<source>` and the fallback `<img>`. The
+closure gets its own `Image`, runs when the output is rendered and may run more than once,
+so don't put side effects in it. Sources keep the order of the array, and the browser
+uses the first one whose `media` and `type` match.
 
 <DataTable head={['Method', 'Media condition']} cols={['k', 'd']} rows={[
   ['minWidth / maxWidth', 'Minimum or maximum viewport width'],
@@ -125,15 +127,15 @@ the first matching `media` and `type`.
   ['media', 'Any custom media query'],
 ]} />
 
-Conditions accumulate with `and`. A pinned format adds its MIME `type`; negotiated or
-`Format::Auto` output has no single type and omits the attribute. `bare()` drops shared
-picture parameters while retaining instance defaults and media conditions; pass it a
-path to use another file. `sources()` returns unrendered source data and `image()` the
-fallback image.
+Several conditions are combined with `and`. A source with a fixed format gets a MIME
+`type`; with `Format::Auto` there's no single type, so the attribute is left out.
+`bare()` drops the picture's shared parameters but keeps instance defaults and media
+conditions; pass it a path to use a different file. `sources()` returns the source data
+without rendering it, and `image()` returns the fallback image.
 
 ## Transformation builder
 
-Every picturium URL parameter has a typed setter. Enums cover fixed value sets.
+Every URL parameter has a typed setter, and parameters with a fixed set of values use enums.
 
 ```php
 use Picturium\Enum\{
@@ -161,14 +163,14 @@ img('a.jpg')
   ['Grouped parameters', 'crop · filter · watermark · animate'],
 ]} />
 
-For server behavior and limits, see [Sizing & constraints](/docs/sizing),
-[Cropping & gravity](/docs/cropping), [Filters](/docs/filters),
+What each parameter does on the server is explained in [Sizing & layout](/docs/sizing),
+[Cropping](/docs/cropping), [Filters & effects](/docs/filters),
 [Watermarking](/docs/watermarking), [Output format & quality](/docs/output),
 [Animation & video](/docs/animation), and [Documents & vectors](/docs/documents).
 
 ### Grouped parameters
 
-Grouped methods use named arguments, and repeated calls merge supplied fields.
+The grouped methods take named arguments, and calling one again merges in the new fields.
 
 ```php
 img('a.jpg')
@@ -183,43 +185,55 @@ img('a.jpg')->disableWatermark();
 img('a.jpg')->disableAnimation();
 ```
 
-`animate()` accepts `frames`, `timing`, `fps`, `loop`, and `stride`; `timing` and `fps`
-are mutually exclusive. The disabling methods override server-configured behavior.
+`animate()` accepts `frames`, `timing`, `fps`, `loop` and `stride`; you can use `timing`
+or `fps`, not both. The `disable…` methods override whatever the server is configured to do.
 
 ### Short aliases
 
-Aliases delegate to the long methods, preserving types and validation.
+The aliases just call the long methods, with the same types and checks.
 
-<DataTable head={['Long methods', 'Aliases']} cols={['', 'k']} rows={[
-  ['width · height · aspectRatio · gravity', 'w · h · ar · g'],
-  ['quality · format · background · rotate', 'q · f · bg · rot'],
-  ['padding · metadata · time · pages', 'pad · meta · t · page'],
-  ['animate · autoRotate · limit', 'anim · autorot · limits'],
+<DataTable head={['Method · alias']} rows={[
+  ['width · w'],
+  ['height · h'],
+  ['aspectRatio · ar'],
+  ['gravity · g'],
+  ['quality · q'],
+  ['format · f'],
+  ['background · bg'],
+  ['rotate · rot'],
+  ['padding · pad'],
+  ['metadata · meta'],
+  ['time · t'],
+  ['pages · page'],
+  ['animate · anim'],
+  ['autoRotate · autorot'],
+  ['limit · limits'],
 ]} />
 
 ### Enum values
 
-<DataTable head={['Enum', 'Cases']} cols={['k', 'd']} rows={[
-  ['AspectRatio', 'Auto · Video · Square; fractions such as 4/3 also work'],
+<DataTable head={['Enum', 'Cases', 'Also']} cols={['k', 'd', '']} rows={[
+  ['AspectRatio', 'Auto · Video · Square', 'fractions such as 4/3'],
   ['Fit', 'Cover · Contain · Force'],
   ['Gravity', 'Top · Right · Bottom · Left · TopLeft · TopRight · BottomLeft · BottomRight · Center · Attention · Entropy'],
   ['Extend', 'Background · Copy · Repeat · Mirror'],
   ['Resample', 'Nearest · Linear · Cubic · Lanczos2 · Lanczos3'],
   ['Rotate', 'None · Left · UpsideDown · Right'],
-  ['Quality', 'Auto · Low · Medium · High · Maximum; integers 1–100 also work'],
+  ['Quality', 'Auto · Low · Medium · High · Maximum', 'integers 1–100'],
   ['Format', 'Auto · Jpeg · Png · Gif · Webp · Avif · Jxl · Pdf · Svg'],
   ['Metadata', 'None · Icc · Exif · Xmp · Iptc · Other · Gainmap · All'],
   ['Anchor', 'Center · Repeat · Top · Right · Bottom · Left · TopLeft · TopRight · BottomLeft · BottomRight'],
 ]} />
 
-Colours accept a CSS name, bare 3, 4, 6, or 8 digit hex without `#`, or a supported
-CSS colour function. `style()` base64-encodes raw CSS for the server.
+Colours can be a CSS name, 3, 4, 6 or 8 digit hex without the `#`, or one of the
+supported CSS colour functions. `style()` takes plain CSS and base64-encodes it for you.
 
 ## Validation and immutability
 
-Invalid numeric ranges and cross-parameter rules throw
-`Picturium\Exception\InvalidParameter` while building, before a broken URL reaches a
-template. The server remains authoritative for files and configuration-dependent limits.
+Out-of-range values and invalid combinations throw
+`Picturium\Exception\InvalidParameter` while you build the URL, so a broken one never
+reaches your template. The server still has the final say on files and on limits that
+depend on its configuration.
 
 ```php
 $base = img('hero.jpg')->quality(80);
@@ -227,21 +241,130 @@ $mobile = $base->width(400);
 $desktop = $base->width(1600); // $base is unchanged
 ```
 
-`mutable()` switches one builder to in-place updates. Use it only after measuring a real
-benefit; signing usually costs more than cloning this small state.
+`mutable()` makes one builder update in place. You probably don't need it: signing the
+URL costs more than copying this small object.
 
 ## Signing and caching
 
 Path segments and query values are percent-encoded. Parameters and grouped
-sub-parameters are sorted before HMAC-SHA256 signing, producing a stable URL regardless
-of setter order. Signed URLs do not expire; rotating the secret invalidates them.
+sub-parameters are sorted before signing, so the same image always gets the same URL no
+matter which order you called the setters in. Signed URLs don't expire; changing the
+secret invalidates all of them.
 
 - `cache($version)` changes the browser or CDN URL, not picturium's generated cache key.
-- `force()` bypasses generated caches and validators, returns `no-store`, and replaces generated cache entries.
+- `force()` skips the server caches and validators, sends `no-store`, and replaces the cached entries.
 
-See [Caching & force](/docs/request-model#caching--force) for the complete behavior.
-With `image.upsize=false`, a high-DPR candidate can be smaller than promised when its
-source is too small. Output width and height limits apply after DPR multiplication.
+[Caching & force](/docs/request-model#caching--force) has the details. One thing to keep in
+mind: with `image.upsize=false`, a high-DPR candidate can come out smaller than its
+descriptor says if the source isn't big enough. Output width and height limits are
+applied after the DPR multiplication.
+
+## Laravel
+
+With Laravel installed, the package's service provider is discovered automatically;
+nothing else to install. Publish the config file and set the server in `.env`:
+
+```bash
+php artisan vendor:publish --tag=picturium-config
+```
+
+```dotenv
+PICTURIUM_URL=https://img.example.com
+PICTURIUM_SECRET=your-signature-secret
+```
+
+`config/picturium.php` also takes `defaults` for every image, named `presets`, and extra
+servers under `connections`. Keys are the builder's setter names in kebab-case:
+
+```php
+'presets' => [
+    'hero' => ['width' => 1600, 'dpr' => [1, 2]],
+    'thumb' => ['width' => 200, 'aspect-ratio' => '1/1', 'fit' => Picturium\Enum\Fit::Cover],
+    'banner' => ['quality' => 80, 'sources' => [
+        ['min-width' => 1024, 'width' => 1920],
+        ['max-width' => 640, 'portrait' => true, 'width' => 640, 'aspect-ratio' => '1/1'],
+    ]],
+],
+```
+
+A `sources` key turns a preset into a reusable `<picture>`: each entry is one `<source>`,
+using the same keys as the `sources` prop. Sources you pass inline replace the preset's.
+Presets with `sources` only work on pictures, so using one on an `img` or a cast throws.
+
+The bridge adds Blade components, where every setter (and alias) is a prop and anything
+else, like `class` or `loading`, ends up on the tag:
+
+```blade
+<x-picturium::img src="hero.jpg" preset="hero" alt="Hero" class="rounded-lg" loading="lazy" />
+<x-picturium::picture src="hero.jpg" preset="banner" alt="Hero" />
+```
+
+There's also an Eloquent cast, `AsPicturiumImage`, that turns a stored path into an
+`Image`, optionally with a preset and server (`AsPicturiumImage::class . ':thumb,cdn'`).
+`Image` and `Picture` are `JsonSerializable`, so with the cast in place you can pass
+models straight to Inertia and spread the attributes onto an `<img>`.
+
+## Symfony
+
+The package also ships a bundle. Register it, then configure it with the same keys as
+the Laravel config file:
+
+```php
+// config/bundles.php
+return [
+    // ...
+    Picturium\Symfony\PicturiumBundle::class => ['all' => true],
+];
+```
+
+```yaml
+# config/packages/picturium.yaml
+picturium:
+    url: '%env(PICTURIUM_URL)%'
+    secret: '%env(PICTURIUM_SECRET)%'
+    defaults: { quality: 80, format: auto }
+    presets:
+        hero: { width: 1600, dpr: [1, 2] }
+        thumb: { width: 200, aspect-ratio: '1/1', fit: cover }
+        banner:
+            quality: 80
+            sources:
+                - { min-width: 1024, width: 1920 }
+                - { max-width: 640, portrait: true, width: 640, aspect-ratio: '1/1' }
+    connections:
+        cdn: { url: '%env(PICTURIUM_CDN_URL)%', secret: '%env(PICTURIUM_CDN_SECRET)%' }
+```
+
+An empty secret turns signing off. `Picturium` autowires to the default server, each
+server is also a `picturium.connection.<name>` service, and `img()` / `picture()` go
+through the container.
+
+With Twig installed you get two functions. Props use the same names as the Blade
+components, and anything that isn't a setter ends up on the tag:
+
+```twig
+{{ picturium_img('hero.jpg', {alt: 'Hero', class: 'rounded-lg'}, preset: 'hero', on: 'cdn') }}
+
+{{ picturium_picture('hero.jpg', {quality: 80, dpr: [1, 2], alt: 'Hero'}, sources: [
+    {'min-width': 1024, width: 1920},
+    {'max-width': 640, portrait: true, width: 640, 'aspect-ratio': '1/1'},
+]) }}
+```
+
+`style` is the SVG image parameter, so inline CSS for the tag goes through
+`attributes: {style: '...'}`.
+
+With Doctrine DBAL installed, the bundle registers a `picturium_image` column type and a
+`picturium_image.<preset>` type for each preset. The column stores the path and loads as an
+`Image`:
+
+```php
+#[ORM\Column(type: 'picturium_image.hero', nullable: true)]
+public ?Image $hero = null;
+```
+
+Doctrine types don't get per-column options, so unlike the Eloquent cast they always use
+the default server.
 
 ## API summary
 
@@ -253,6 +376,6 @@ source is too small. Output width and height limits apply after DPR multiplicati
   ['Builder state', 'file · on · mutable · attribute · alt · lazy'],
 ]} />
 
-The package source and issue tracker are on
-[GitHub](https://github.com/lamka02sk/picturium-php-client). For raw parameter names and
-status codes, use the [Quick reference](/docs/reference).
+The source and issue tracker are on
+[GitHub](https://github.com/picturium/php-client). For raw parameter names and status
+codes, see the [Quick reference](/docs/reference).

@@ -15,8 +15,10 @@
   --ink-0: #f4f6fa;
   --ink-1: #d8dde6;
   --ink-2: #98a0ae;
-  --ink-3: #6b7280;
-  --ink-4: #444a55;
+  /* ink-3/ink-4 are the dimmest text ramp; both clear WCAG AA (4.5:1) against
+     every bg-* token, so anything using them stays readable. */
+  --ink-3: #8a92a0;
+  --ink-4: #7d8593;
 
   /* rainbow accents — from the picturium logo */
   --px-red:     #ff3a3a;
@@ -44,10 +46,10 @@
   --accent-2: var(--px-magenta);
 
   /* type */
-  --f-display: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --f-pixel: "VT323", ui-monospace, monospace;
+  --f-display: var(--font-display);
+  --f-body: var(--font-body);
+  --f-mono: var(--font-mono);
+  --f-pixel: var(--font-pixel);
 
   /* spacing */
   --r-sm: 6px;
@@ -76,6 +78,31 @@ body {
 img { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; }
+
+/* One focus indicator for the whole site. Components that style their own
+   focus state are free to override it; nothing may set outline:none without
+   putting something else visible in its place. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* skip link — first tab stop, visible only while focused */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  background: var(--ink-0);
+  color: var(--bg-0);
+  font-size: 13.5px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible { transform: none; }
 
 /* selection */
 ::selection { background: var(--accent); color: var(--bg-0); }
@@ -185,7 +212,7 @@ button { font: inherit; color: inherit; }
   grid-template-columns: 1.4fr 1fr 1fr 1fr;
   background: var(--bg-0);
 }
-.footer h5 {
+.footer h3 {
   margin: 0 0 14px;
   font-size: 11px;
   font-weight: 600;
@@ -197,7 +224,7 @@ button { font: inherit; color: inherit; }
 .footer a { color: var(--ink-2); font-size: 13.5px; transition: color 0.15s; }
 .footer a:hover { color: var(--ink-0); }
 .footer-brand { display: flex; flex-direction: column; gap: 14px; }
-.footer-brand img { width: 30px; image-rendering: pixelated; }
+.footer-brand img { width: 144px; height: auto; }
 .footer-brand p { margin: 0; color: var(--ink-3); font-size: 13px; max-width: 30ch; }
 .footer-bottom {
   grid-column: 1 / -1;

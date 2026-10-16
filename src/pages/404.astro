@@ -1,0 +1,226 @@
+---
+import Base from '../layouts/Base.astro';
+import { REPO } from '../consts';
+
+// Same seeded pixel field as the hero, but tuned for a centred layout: squares
+// scatter outwards from behind the 404 instead of spilling from a stage edge.
+const pixelField = (() => {
+  const hues = ['255, 58, 58', '255, 138, 31', '255, 214, 51', '51, 224, 102', '43, 212, 240', '58, 120, 255', '216, 60, 255'];
+  const cell = 28, cols = 30, rows = 14;
+  let seed = 0x2545f491;
+  const rand = () => (((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296));
+  const shadows: string[] = [];
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      // Density and alpha fall off with distance from the centre of the field.
+      const near = 1 - Math.abs(c / (cols - 1) - 0.5) * 2;
+      if (rand() > near * 0.4) continue;
+      const alpha = (0.08 + rand() * 0.26) * near;
+      shadows.push(`${c * cell}px ${r * cell}px 0 rgba(${hues[(c + r) % hues.length]}, ${alpha.toFixed(3)})`);
+    }
+  }
+  return shadows.join(', ');
+})();
+
+const links = [
+  {
+    href: '/docs',
+    title: 'Documentation',
+    icon: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+    body: 'Install it, point it at your media, and learn the URL parameters one section at a time.',
+  },
+  {
+    href: '/docs/reference',
+    title: 'Quick reference',
+    icon: '<path d="M3 6l9 4 9-4-9-4-9 4z"/><path d="M3 12l9 4 9-4"/><path d="M3 18l9 4 9-4"/>',
+    body: 'Every parameter, value, and default on a single page.',
+  },
+  {
+    href: '/#playground',
+    title: 'Playground',
+    icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 13l5-5 4 4 4-4 5 5"/>',
+    body: 'Build a transformation URL and watch a live picturium response render.',
+  },
+  {
+    href: REPO,
+    title: 'GitHub',
+    icon: '<path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.7 1a9.3 9.3 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.3.2 2.3.1 2.6.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/>',
+    body: 'Source, issues, discussions, and releases.',
+  },
+];
+---
+<Base title="404 — page not found · picturium" description="That page does not exist. Head back to the picturium documentation, quick reference, or playground.">
+  <main id="main" class="nf">
+    <div class="bg-layer bg-grid" aria-hidden="true"></div>
+    <div class="bg-layer bg-pixels" aria-hidden="true"><i style={`box-shadow:${pixelField}`}></i></div>
+
+    <div class="nf-inner">
+      <div class="nf-code" aria-hidden="true">404</div>
+      <h1>Source file not found</h1>
+      <p>picturium can transform almost anything — but not a page that isn’t there.</p>
+
+      <div class="nf-url">
+        <span class="nf-status">404</span>
+        <code id="nf-path">/</code>
+      </div>
+
+      <div class="nf-links">
+        {links.map((l) => (
+          <a class="feature" href={l.href} rel={l.href.startsWith('http') ? 'noopener' : undefined}>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" set:html={l.icon} />
+            <h2>{l.title}</h2>
+            <p>{l.body}</p>
+          </a>
+        ))}
+      </div>
+    </div>
+
+    <script is:inline>
+      // Static build: the missing path is only known in the browser.
+      document.getElementById('nf-path').textContent =
+        location.pathname + location.search;
+    </script>
+  </main>
+</Base>
+
+<style>
+  .nf {
+    position: relative;
+    overflow: hidden;
+    padding: 96px 28px 128px;
+    min-height: calc(100vh - var(--nav-h, 60px) - 260px);
+  }
+  .nf .bg-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .nf .bg-grid {
+    mask-image: radial-gradient(60% 60% at 50% 30%, #000, transparent);
+    -webkit-mask-image: radial-gradient(60% 60% at 50% 30%, #000, transparent);
+  }
+  .nf .bg-pixels {
+    mask-image: radial-gradient(46% 46% at 50% 26%, transparent 30%, #000 85%);
+    -webkit-mask-image: radial-gradient(46% 46% at 50% 26%, transparent 30%, #000 85%);
+  }
+  .bg-pixels > i {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 28px;
+    height: 28px;
+    transform: translateX(-420px);
+  }
+
+  .nf-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 640px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .nf-code {
+    font-family: var(--f-pixel);
+    font-size: clamp(72px, 18vw, 148px);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    background: var(--rainbow);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .nf-inner h1 {
+    margin: 18px 0 0;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(24px, 5vw, 34px);
+    letter-spacing: -0.025em;
+    color: var(--ink-0);
+  }
+  .nf-inner > p {
+    margin: 10px 0 0;
+    color: var(--ink-2);
+  }
+
+  .nf-url {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 26px 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--bg-1);
+    box-shadow: var(--shadow-sm);
+    text-align: left;
+  }
+  .nf-status {
+    flex-shrink: 0;
+    padding: 2px 7px;
+    border-radius: var(--r-sm);
+    background: rgba(255, 58, 58, 0.14);
+    color: var(--px-red);
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .nf-url code {
+    font-family: var(--f-mono);
+    font-size: 13px;
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Same hairline card grid as the homepage feature list. */
+  .nf-links {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    margin: 32px 0 0;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    text-align: left;
+  }
+  .feature {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px 22px;
+    background: var(--bg-1);
+    color: inherit;
+    transition: background 0.18s;
+  }
+  .feature:hover { background: var(--bg-2); }
+  .feature:hover h2 { color: var(--accent); }
+  .feature::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--rainbow);
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  .feature:hover::after { opacity: 1; }
+  .feature .icon { width: 26px; height: 26px; color: var(--accent); }
+  .feature h2 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 15.5px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--ink-0);
+  }
+  .feature p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+
+  @media (max-width: 640px) {
+    .nf { padding: 64px 16px 88px; }
+    .nf-links { grid-template-columns: 1fr; }
+  }
+</style>

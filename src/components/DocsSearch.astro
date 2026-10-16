@@ -55,11 +55,20 @@ const routes = (await getCollection('docs')).map((doc) => `/docs/${doc.id}`);
     return nodes;
   };
 
-  const TEXT = 'h1, h2, h3, p, li, th, td, pre';
+  // .entry (EntryList) is indexed whole: its key lives in a span, not a p or li
+  const TEXT = 'h1, h2, h3, p, li, th, td, pre, .entry';
+  const insideEntry = (element: Element) => !!element.parentElement?.closest('.entry');
+  // an entry's parts are separate elements with no whitespace between them
+  const spaced = (element: Element) => {
+    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const parts: string[] = [];
+    while (walker.nextNode()) parts.push(walker.currentNode.textContent!);
+    return parts.join(' ');
+  };
   const textOf = (nodes: Element[]) => nodes
     .flatMap((node) => [...(node.matches(TEXT) ? [node] : []), ...node.querySelectorAll(TEXT)])
-    .filter((element) => !element.closest('.crumb'))
-    .map((element) => element.textContent?.trim())
+    .filter((element) => !element.closest('.crumb') && !insideEntry(element))
+    .map((element) => (element.matches('.entry') ? spaced(element) : element.textContent)?.trim())
     .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ');
@@ -182,8 +191,8 @@ const routes = (await getCollection('docs')).map((doc) => `/docs/${doc.id}`);
     const terms = normalize(arrivalQuery).split(' ').filter(Boolean);
     const heading = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
     const scope: Element[] = heading ? sectionOf(heading) : [document.querySelector('main')!];
-    const candidates = scope.flatMap((node) => [...node.querySelectorAll<HTMLElement>('p, li, td, pre')]);
-    const hit = candidates.find((candidate) => terms.every((term) => normalize(candidate.textContent || '').includes(term)))
+    const candidates = scope.flatMap((node) => [...node.querySelectorAll<HTMLElement>('.entry, p, li, td, pre')]).filter((c) => !insideEntry(c));
+    const hit = candidates.find((candidate) => terms.every((term) => normalize(spaced(candidate)).includes(term)))
       || (heading as HTMLElement | null)
       || document.querySelector<HTMLElement>('main');
     if (hit) {
@@ -265,10 +274,19 @@ const routes = (await getCollection('docs')).map((doc) => `/docs/${doc.id}`);
     min-width: 0;
     width: 100%;
     border: 0;
-    outline: 0;
     background: transparent;
     color: var(--ink-0);
     font: 500 17px var(--f-display);
+    caret-color: var(--accent);
+  }
+  /* Text inputs always match :focus-visible, so the site ring would box the
+     bare text every time the dialog opens. The whole bar carries focus instead:
+     the icon and the divider under it light up in the accent. */
+  .search-bar input:focus { outline: 0; }
+  .search-bar { transition: color 0.15s, border-color 0.15s; }
+  .search-bar:focus-within {
+    color: var(--accent);
+    border-bottom-color: color-mix(in srgb, var(--accent) 55%, transparent);
   }
   .search-bar input::placeholder { color: var(--ink-3); }
   .search-close {
@@ -296,7 +314,7 @@ const routes = (await getCollection('docs')).map((doc) => `/docs/${doc.id}`);
     border: 1px solid transparent;
     border-radius: var(--r-md);
   }
-  .search-results :global(.search-list a:hover), .search-results :global(.search-list a:focus-visible) { border-color: var(--line); outline: 0; background: var(--bg-2); }
+  .search-results :global(.search-list a:hover), .search-results :global(.search-list a:focus-visible) { border-color: var(--line); background: var(--bg-2); }
   .search-results :global(.search-list strong) { min-width: 0; overflow-wrap: anywhere; color: var(--ink-0); font: 600 14px var(--f-display); }
   .search-results :global(.search-page) { color: var(--ink-3); font: 10px/1.8 var(--f-mono); text-transform: uppercase; letter-spacing: 0.06em; }
   .search-results :global(.search-list p) { grid-column: 1 / -1; min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--ink-2); font-size: 12.5px; line-height: 1.45; }
@@ -315,7 +333,7 @@ const routes = (await getCollection('docs')).map((doc) => `/docs/${doc.id}`);
     box-shadow: inset 3px 0 var(--accent), 0 0 28px rgba(43, 212, 240, 0.08);
     animation: search-arrival 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  :global(main [class].search-arrival:not(td)) {
+  :global(main [class].search-arrival:not(td, .entry)) {
     width: 100%;
     max-width: none;
     padding: 8px 12px;

@@ -6,20 +6,20 @@ description: Overlay an image or text watermark, place or repeat it, and set ser
 import DataTable from '../../components/DataTable.astro';
 import TransformFlow from '../../components/TransformFlow.astro';
 
-Watermarks are the last image transform: picturium draws them after
-[cropping](/docs/cropping), [sizing and padding](/docs/sizing), and
-[filters](/docs/filters), but before the raster output is encoded.
+The watermark is the last thing drawn on the image: after [cropping](/docs/cropping),
+[sizing and padding](/docs/sizing) and [filters](/docs/filters), right before the result
+is encoded.
 
 <TransformFlow />
 
-Use the request parameter for one response, or enable a default mark in
-`config.toml`. The compact tables are also available in the
+You can add one to a single response with the `watermark` parameter, or turn on a default
+mark for everything in `config.toml`. The condensed tables are in the
 [`watermark` quick reference](/docs/reference#watermark).
 
 ## Watermark parameter
 
-Join `key:value` segments with `|`. Keys are case-sensitive, and omitted keys fall
-back to `[watermark]` configuration values.
+Write it as `key:value` pairs joined with `|`. Keys are case-sensitive, and anything you
+leave out falls back to the `[watermark]` configuration.
 
 ```text
 /photo.jpg?watermark=image:marks/logo.png|anchor:bottom-right|opacity:60|pad:20
@@ -30,42 +30,43 @@ back to `[watermark]` configuration values.
   head={['Key', 'Accepted value', 'Default', 'Effect']}
   cols={['k', '', 'd', '']}
   rows={[
-    ['image', 'path under data.dir', 'watermark.image.path', 'Image mark. A request path cannot escape the data directory.'],
-    ['text', 'string', 'watermark.text.text', 'Text mark. Used when this request does not provide image.'],
-    ['anchor', 'position · repeat', 'watermark.position', 'Places one mark or tiles it over the image.'],
-    ['opacity', 'integer 0–100', 'watermark.opacity', 'Overall mark opacity in percent.'],
-    ['pad · padding', 'N · v,h · t,r,b · t,r,b,l', 'watermark.padding', 'Gap from the image edge, or spacing around repeated tiles.'],
-    ['rot · rotate', 'finite degrees', 'watermark.rotate', 'Rotates the mark by any angle.'],
-    ['scale', 'float > 0', 'watermark.image.scale', 'Scales an image mark before max_scale is enforced.'],
-    ['font', 'font family', 'watermark.text.font_family', 'Font for a text mark. It must be available to the server.'],
-    ['size', 'integer px', 'watermark.text.font_size', 'Font size for a text mark.'],
-    ['color', 'same syntax as bg', 'watermark.text.font_color', 'Colour for a text mark.'],
+    ['image', 'path under data.dir', 'watermark.image.path', 'Image mark. A path from the request can\'t leave the data directory.'],
+    ['text', 'string', 'watermark.text.text', 'Text mark, used when the request doesn\'t give an image.'],
+    ['anchor', 'position · repeat', 'watermark.position', 'Places a single mark, or tiles it across the image.'],
+    ['opacity', 'whole number 0–100', 'watermark.opacity', 'Opacity of the mark, in percent.'],
+    ['pad · padding', 'N · v,h · t,r,b · t,r,b,l', 'watermark.padding', 'Distance from the edge, or the space around each tile when repeating.'],
+    ['rot · rotate', 'any finite number of degrees', 'watermark.rotate', 'Rotates the mark.'],
+    ['scale', 'float > 0', 'watermark.image.scale', 'Scales an image mark. max_scale is applied afterwards.'],
+    ['font', 'font family', 'watermark.text.font_family', 'Font for a text mark. It has to be installed on the server.'],
+    ['size', 'whole number, px', 'watermark.text.font_size', 'Font size for a text mark.'],
+    ['color', 'same syntax as bg', 'watermark.text.font_color', 'Colour of a text mark.'],
   ]}
 />
 
-Use colours such as `white`, `ff8a1f`, or `rgb(255,138,31)`. A raw `#` starts a URL
-fragment, so omit it from hex colours. Encode user-provided text as a URL query value;
-`|` separates watermark segments.
+Colours can be `white`, `ff8a1f`, `rgb(255,138,31)` and so on. Leave out the `#` on hex
+colours, since the browser would treat the rest of the URL as a fragment. URL-encode any
+text that comes from users; a `|` in it would start a new segment.
 
-`watermark=false` disables a configured watermark for one request. A parameter with
-only styling keys, such as `watermark=opacity:60`, draws nothing unless configuration
-provides an image or text source.
+`watermark=false` switches off a configured watermark for one request. A parameter with
+only styling keys, like `watermark=opacity:60`, draws nothing unless the configuration
+supplies an image or text.
 
 ## Image and text sources
 
-The source is selected in this order:
+picturium uses the first of these that's set:
 
-1. request `image`
-2. request `text`
-3. configured `watermark.image.path`
-4. configured `watermark.text.text`
+1. `image` from the request
+2. `text` from the request
+3. `watermark.image.path` from the configuration
+4. `watermark.text.text` from the configuration
 
-This means request values take priority over configuration: a request `text` replaces
-a configured image. When both sources are supplied at the same level, the image wins.
+Request values always beat configuration, so a request `text` replaces a configured
+image. When the request (or the configuration) provides both an image and text, the image
+wins.
 
-A request `image` path is resolved beneath `data.dir` and cannot traverse outside it.
-The configured `watermark.image.path` is operator-controlled and is not confined to
-the data directory, so it may point to a separately mounted asset.
+An `image` path from the request is resolved under `data.dir` and can't escape it. The
+configured `watermark.image.path` is set by you, the operator, so it isn't restricted and
+can point to a separately mounted file.
 
 ```text
 /photo.jpg?watermark=image:marks/brand.png|scale:0.75
@@ -78,8 +79,8 @@ the data directory, so it may point to a separately mounted asset.
 
 <p class="fmt">center · repeat · top · right · bottom · left · top-left · top-right · bottom-left · bottom-right</p>
 
-For a single mark, padding is the inset from the selected edge. With `anchor:repeat`,
-the mark is tiled from the top left and the four padding values become transparent
+For a single mark, padding is the distance from the edge it's anchored to. With
+`anchor:repeat`, the mark is tiled from the top-left corner and the padding becomes empty
 space around each tile.
 
 ```text
@@ -87,15 +88,15 @@ space around each tile.
 /photo.jpg?watermark=text:Draft|anchor:repeat|padding:30|opacity:18|rot:-30
 ```
 
-An oversized mark is reduced without changing its aspect ratio. The
-`watermark.max_scale` configuration value caps its width and height to a fraction of
-the final canvas; padding can reduce the available space further. Request-supplied
-`padding`, image `scale`, and text `size` are multiplied by `dpr`.
+A mark that's too big gets scaled down, keeping its proportions.
+`watermark.max_scale` limits its width and height to a fraction of the final image, and
+padding eats into that space too. Padding, image `scale` and text `size` from the request
+are all multiplied by `dpr`.
 
 ## Configuration defaults
 
-Set an image or text source before enabling the global watermark. picturium refuses to
-start when `enabled = true` but neither source is configured.
+Configure an image or a text before you turn the global watermark on. picturium won't
+start with `enabled = true` and no source.
 
 ```toml
 [watermark]
@@ -111,7 +112,7 @@ path = "/opt/picturium/marks/brand.png"
 scale = 1.0
 ```
 
-For a text default, replace the image table with:
+For a text watermark, swap the image table for:
 
 ```toml
 [watermark.text]
@@ -121,18 +122,18 @@ font_size = 24
 font_color = "white"
 ```
 
-`opacity` must be `0–100`, `image.scale` must be greater than zero, and `max_scale`
-must be greater than zero and at most `1`. Invalid values, an invalid text colour, or
-an enabled watermark without a source stop startup. See the
-[`[watermark]` config reference](/docs/config-keys#watermark) for every key and default.
+`opacity` has to be between `0` and `100`, `image.scale` above zero, and `max_scale`
+above zero and at most `1`. An invalid value, an unparseable text colour, or an enabled
+watermark with no source all stop picturium from starting. Every key and default is in
+the [`[watermark]` config reference](/docs/config-keys#watermark).
 
 ## Processing behaviour
 
-Watermarks are applied to every frame of an [animated image or video clip](/docs/animation)
-and every rendered page of
-a document when the result is raster output. Because the mark comes after filters, its
-colour and opacity are not changed by `filter=`.
+The mark is drawn on every frame of an [animated image or video clip](/docs/animation)
+and on every rendered page of a document. Since it comes after filters, `filter=` doesn't
+change its colour or opacity.
 
-Watermarking is bypassed when picturium returns the source with `original=true` or a
-document response with [`f=pdf` or `f=svg`](/docs/output#format-selection). Raster
-formats such as JPEG, PNG, WebP, GIF, AVIF, and JXL receive the mark normally.
+No watermark is added when picturium returns the source file with `original=true`, or a
+document with [`f=pdf` or `f=svg`](/docs/output#format-selection). JPEG, PNG, WebP, GIF,
+AVIF and JXL output all get it. An animated watermark image only contributes its first
+frame.

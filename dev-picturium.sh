@@ -8,7 +8,7 @@ set -euo pipefail
 docs="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 src="${PICTURIUM_SRC:-$docs/../picturium2}"
 port="${PICTURIUM_PORT:-20048}"
-image="${PICTURIUM_IMAGE:-lamka02sk/picturium-dev:8.18.4}"
+image="${PICTURIUM_IMAGE:-lamka02sk/picturium-dev:8.18.6}"
 
 [ -d "$src/src" ] || { echo "picturium source not found at $src — set PICTURIUM_SRC" >&2; exit 1; }
 

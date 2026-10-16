@@ -56,7 +56,7 @@ export const QUICK_REFERENCE = {
     {
       title: 'HTTP status codes',
       slug: 'status-codes',
-      summary: '200, 304, 403, 404, 415, 500, 503 and what causes each.',
+      summary: '200, 304, 400, 403, 404, 415, 500, 503 and what causes each.',
     },
   ],
 } satisfies { slug: string; title: string; summary: string; pages: DocPage[] };
@@ -75,33 +75,32 @@ export const DOCS_NAV: DocCategory[] = [
     group: 'basics',
     title: 'Getting started',
     slug: 'getting-started',
-    summary: 'Install picturium, start the server, and transform your first image.',
+    summary: 'Install picturium with one command, keep it up to date, and transform your first image.',
     pages: [
       {
-        title: 'Overview',
-        slug: 'overview',
-        summary: 'See how a file path and URL parameters become a transformed, cached response.',
-      },
-      {
-        title: 'Install & run',
+        title: 'Install',
         slug: 'install',
-        summary: 'Install with Docker, Cargo, or a prebuilt binary, and review the tools needed for each source type.',
+        summary: 'Run the one-line installer. It asks a few questions and starts picturium with Docker.',
       },
       {
-        title: 'The data directory',
-        slug: 'data-directory',
-        summary: 'Choose the root folder picturium can serve. Requests cannot access files outside it.',
-        params: ['data.dir'],
+        title: 'Upgrade',
+        slug: 'upgrade',
+        summary: 'Run the installer again to upgrade to the newest release, or pin a specific version.',
+      },
+      {
+        title: 'Configure',
+        slug: 'configure',
+        summary: 'Add any config key to the generated .env file and restart.',
+      },
+      {
+        title: 'Run with Docker manually',
+        slug: 'docker',
+        summary: 'The same setup with a plain docker run command.',
       },
       {
         title: 'Your first request',
         slug: 'first-request',
-        summary: 'The parts of a request URL, what comes back, and which response headers to check.',
-      },
-      {
-        title: 'Supported formats',
-        slug: 'formats',
-        summary: 'Input: jpeg, png, tiff, webp, gif, heif, jxl, jp2k, ico, bmp, psd, raw, svg, eps/ai/cdr, pdf, office, video. Output: jpeg, webp, png, gif, avif, jxl, plus pdf/svg passthrough.',
+        summary: 'The parts of a request URL and what comes back.',
       },
     ],
   },
@@ -143,7 +142,7 @@ export const DOCS_NAV: DocCategory[] = [
       {
         title: 'Health & capacity',
         slug: 'health',
-        summary: 'Check worker and queue capacity with GET /health, and understand when the server returns 503.',
+        summary: 'Check status, capacity and memory with GET /health, and understand when the server returns 503.',
         params: ['server.workers', 'server.queue_size'],
       },
     ],
@@ -245,7 +244,7 @@ export const DOCS_NAV: DocCategory[] = [
       {
         title: 'Blur, sharpen, pixelate',
         slug: 'blur-sharpen',
-        summary: 'Gaussian blur, unsharp, pixelation.',
+        summary: 'Gaussian blur, sharpening, pixelation.',
         params: ['filter'],
       },
       {
@@ -348,18 +347,18 @@ export const DOCS_NAV: DocCategory[] = [
         title: 'PDF',
         slug: 'pdf',
         summary: 'f=pdf serves a PDF from a PDF, office, SVG or vector source; with pages it returns exactly those pages.',
-        params: ['f', 'dpi', 'pdf.load_dpi'],
+        params: ['f', 'dpi', 'pdf.load_dpi', 'pdf.background'],
       },
       {
         title: 'Office documents',
         slug: 'office',
-        summary: 'doc/ppt/xls are converted with LibreOffice first.',
-        params: ['office.conversion_timeout'],
+        summary: 'Word, PowerPoint, Excel and OpenDocument files are converted to PDF with LibreOffice first.',
+        params: ['office.conversion_timeout', 'office.kill_timeout', 'office.max_processes'],
       },
       {
         title: 'Vector art',
         slug: 'vector',
-        summary: 'ai, cdr/cmx/cdt and eps are converted with Inkscape (to SVG for f=svg, to PDF otherwise). Normally one page.',
+        summary: 'ai, cdr/cmx/cdt, eps and dxf are converted with Inkscape (to SVG for f=svg, to PDF otherwise). Usually one page.',
         params: ['vector.conversion_timeout'],
       },
       {
@@ -399,7 +398,7 @@ export const DOCS_NAV: DocCategory[] = [
     group: 'features',
     title: 'Video clipping',
     slug: 'video-clipping',
-    summary: 'Extract a clip or frame from a video source.',
+    summary: 'Cut a shorter video clip out of a video source, returned as video.',
     pages: [],
     comingSoon: true,
   },
@@ -453,6 +452,7 @@ export const DOCS_NAV: DocCategory[] = [
     slug: 'javascript-library',
     summary: 'Use picturium in your JavaScript and TypeScript applications.',
     pages: [],
+    comingSoon: true,
   },
   {
     group: 'integrations',

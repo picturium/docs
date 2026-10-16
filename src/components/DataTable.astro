@@ -1,23 +1,45 @@
 ---
-// Every docs table: same chrome, same column classes. `cols` gives the per-column
-// class ('k' = key/mono, 'd' = default/mono-dim, '' = prose); it defaults to a
-// mono first column. The mobile card layout gets its labels from thead in
-// DocPage's script.
+// Every docs "table", rendered as entries (see EntryList). The props still
+// describe columns: `cols` marks the key column 'k' and mono columns 'd'.
+// Columns are read by role: a long last column is the note, a "value"/"type"
+// column becomes the pills, a "default" column marks one of them, and anything
+// else is a labelled field. `id` gives each entry an anchor (#<id>-<key>).
+import EntryList, { type Entry } from './EntryList.astro';
+
 interface Props {
   head: string[];
   rows: (string | number)[][];
   cols?: string[];
+  id?: string;
   class?: string;
 }
-const { head, rows, cols = ['k'], class: extra } = Astro.props;
+const { head, rows, cols = ['k'], id, class: extra } = Astro.props;
+
+const text = rows.map((r) => r.map(String));
+const keyAt = Math.max(0, cols.indexOf('k'));
+const rest = head.map((_, i) => i).filter((i) => i !== keyAt);
+const last = rest.at(-1);
+const avg = (i: number) => text.reduce((n, r) => n + (r[i]?.length ?? 0), 0) / text.length;
+// a "value"/"type" column, else a mono column of ' · ' lists (methods, enum cases)
+const listAt = rest.find((i) => cols[i] === 'd' && text.every((r) => r[i]?.includes(' · ')));
+const valuesAt = rest.find((i) => /value|type/i.test(head[i]) && !(i === last && avg(i) > 28)) ?? listAt;
+const noteAt = last !== undefined && last !== valuesAt && avg(last) > 28 ? last : undefined;
+const defAt = rest.find((i) => i !== noteAt && /default/i.test(head[i]));
+const fieldsAt = rest.filter((i) => i !== noteAt && i !== valuesAt && i !== defAt);
+const prose = (i: number) => !cols[i];
+// another sentence column means the rows compare two things, so the note needs its name too
+const compares = fieldsAt.some((i) => prose(i) && avg(i) > 40);
+
+const entries: Entry[] = text.map((r) => ({
+  key: r[keyAt],
+  anchor: id ? `${id}-${r[keyAt].split(' · ')[0]}` : undefined,
+  values: valuesAt !== undefined ? r[valuesAt] : undefined,
+  def: defAt !== undefined ? r[defAt] : undefined,
+  defLabel: defAt !== undefined ? head[defAt].toLowerCase() : undefined,
+  fields: fieldsAt.map((i) => [head[i], r[i], prose(i)] as [string, string, boolean]),
+  note: noteAt !== undefined ? r[noteAt] : undefined,
+  noteLabel: compares && noteAt !== undefined ? head[noteAt] : undefined,
+  mono: noteAt !== undefined && cols[noteAt] === 'd',
+}));
 ---
-<div class:list={['tbl-wrap', extra]}>
-  <table>
-    <thead><tr>{head.map((h) => <th>{h}</th>)}</tr></thead>
-    <tbody>
-      {rows.map((row) => (
-        <tr>{row.map((cell, i) => <td class={cols[i] || undefined}>{cell}</td>)}</tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+<EntryList entries={entries} class={extra} />
