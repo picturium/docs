@@ -32,7 +32,7 @@ export const DOC_GROUPS: DocGroup[] = [
   {
     slug: 'integrations',
     title: 'Integrations',
-    summary: 'Use picturium from PHP, JavaScript, or AI workflows.',
+    summary: 'Use picturium from PHP, JavaScript, a visual editor, or AI workflows.',
   },
 ];
 
@@ -125,7 +125,7 @@ export const DOCS_NAV: DocCategory[] = [
         title: 'Caching & force',
         slug: 'caching',
         summary: 'Learn how the memory and disk caches work, and how force=true regenerates and replaces a cached response.',
-        params: ['force', 'cache', 'cache.memory', 'cache.disk', 'cache.cache_control'],
+        params: ['force', 'nocache', 'cache', 'cache.memory', 'cache.disk', 'cache.cache_control'],
       },
       {
         title: 'HTTP caching',
@@ -444,6 +444,13 @@ export const DOCS_NAV: DocCategory[] = [
     title: 'PHP library',
     slug: 'php-library',
     summary: 'Use picturium in your PHP applications, including your favourite frameworks.',
+    pages: [],
+  },
+  {
+    group: 'integrations',
+    title: 'Editor',
+    slug: 'editor',
+    summary: 'Embed a visual editor in your CMS, so people crop and resize without writing a URL.',
     pages: [],
   },
   {

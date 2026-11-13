@@ -47,6 +47,7 @@ export const params: Record<string, Row[]> = {
   delivery: [
     ['original', 'bool', 'false', 'Returns the source unchanged, without transforms or a watermark.'],
     ['force', 'bool', 'false', 'Skips cached responses, regenerates the file, and replaces the cache entry. The response uses Cache-Control: no-store and never returns 304.'],
+    ['nocache · no_cache', 'bool', 'false', 'Renders without reading or filling the server cache, for one-off renders such as editor previews. The response uses Cache-Control: no-store and never returns 304.'],
     ['cache', 'any string', '—', 'Changes the browser or CDN cache key without changing the server cache key.'],
     ['fallback', 'path under data.dir', '—', 'Uses another source when the requested source is missing, or when a PDF exceeds a pdf.max_* limit. It does not catch other processing failures.'],
     ['token', 'hex HMAC-SHA256', '—', 'Required only when signature verification is enabled. Signed over "path?query" with token= removed.'],
@@ -104,7 +105,7 @@ export const limit: Row[] = [
 
 export const status = [
   ['200', 'OK', 'Returns the transformed file or an allowed passthrough file.'],
-  ['304', 'Not Modified', 'A client validator (ETag / If-Modified-Since) matched. Never returned with force=true.'],
+  ['304', 'Not Modified', 'A client validator (ETag / If-Modified-Since) matched. Never returned with force=true or nocache=true.'],
   ['400', 'Bad Request', 'A known query parameter is invalid, or a page selection lands on no existing page.'],
   ['403', 'Forbidden', 'Signature verification is on and token is missing or wrong.'],
   ['404', 'Not Found', 'The source file was not found inside the data directory.'],

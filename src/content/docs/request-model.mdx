@@ -100,7 +100,7 @@ effective parameters, and the resolved output format. So reordering parameters s
 the cache. If several requests miss the same key at once, only one of them renders and
 the rest wait for its result.
 
-The two cache-busting parameters do different jobs:
+The three cache parameters do different jobs:
 
 <DataTable
   head={['Parameter', 'Browser / CDN', 'picturium server cache']}
@@ -108,12 +108,17 @@ The two cache-busting parameters do different jobs:
   rows={[
     ['cache=<value>', 'Changes the URL, so browsers and CDNs treat it as a new resource.', 'Ignored. The cached render and its ETag stay the same.'],
     ['force=true', 'Sends Cache-Control: no-store and never answers with 304.', 'Skips the cache, renders again (intermediates included), and replaces the cached entries.'],
+    ['nocache=true', 'Sends Cache-Control: no-store and never answers with 304.', 'Renders without reading the cached response and stores nothing, so the cache is left as it was.'],
   ]}
 />
 
 `force` isn't part of the cache key, so the ETag doesn't change. For raw files and
 `original=true` there's nothing generated to replace; `force` just skips the conditional
 checks and adds `no-store`.
+
+`nocache` is for renders nobody will ask for twice, like the previews of the
+[editor](/docs/editor) while someone drags a slider. Unlike `force` it leaves no entry
+behind, so a later request without it renders and caches on its own.
 
 Cache sizes, eviction and clearing the disk cache are covered in
 [Configuration & operations](/docs/configuration#cache-tuning). How document conversions
@@ -137,7 +142,7 @@ If-Modified-Since: Sat, 29 Aug 2026 12:00:00 GMT
 
 If both are present, `If-None-Match` wins. A matching ETag, `If-None-Match: *`, or a
 source that hasn't changed since the given date gets a `304` with an empty body.
-`force=true` skips these checks.
+`force=true` and `nocache=true` skip these checks.
 
 Responses where the format came from `f=auto` include `Vary: Accept`; responses with an
 explicit format don't. Gzipped SVGs served as-is use `Vary: Accept-Encoding`. The

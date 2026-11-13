@@ -352,6 +352,13 @@ const toc = headings.filter((h) => h.depth === 2);
     border-radius: var(--r-lg);
     background: var(--bg-1) !important;
   }
+  /* screenshots sit in the same frame as code blocks */
+  .ref-main img.shot {
+    height: auto;
+    margin: 0 0 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+  }
   .ref-main pre code {
     display: block;
     background: none;

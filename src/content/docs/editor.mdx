@@ -1,0 +1,218 @@
+---
+title: Editor
+description: Embed a visual editor for picturium images in your CMS or admin. People crop, resize and filter with plain controls, and your page receives the finished URL.
+---
+
+import DataTable from '../../components/DataTable.astro';
+
+The editor puts picturium's URL parameters behind plain controls. Your users drag a crop
+region, move a slider and choose "Fill" or "Fit inside"; your page receives the URL. They
+never need to know what picturium is.
+
+<img class="shot" src="/editor/editor-dark.jpg" alt="The editor in its dark theme, with the size controls open next to a preview of a coastal town" width="800" height="499" />
+
+It drops into any page as one ES module and one stylesheet, has no runtime dependencies,
+and speaks English, German, Slovak, Czech and Spanish.
+
+```bash
+npm install @lamka02sk/picturium-editor
+```
+
+The stage is not a CSS imitation. Every preview is rendered by your picturium server, so
+what people see is what the URL returns.
+
+## Mount the editor
+
+Give it an element, the address of your server and the path of a file under
+[`data.dir`](/docs/config-keys#data).
+
+```ts
+import { createEditor } from '@lamka02sk/picturium-editor';
+import '@lamka02sk/picturium-editor/style.css';
+
+const editor = createEditor(document.getElementById('editor')!, {
+    server: 'https://img.example.com',
+    source: 'photos/coastal-town.jpg',
+    onUse: (url, params) => saveImage(url, params),
+    onClose: () => editor.destroy(),
+});
+```
+
+```html
+<div id="editor" style="height: 100vh"></div>
+```
+
+The editor fills its element, so the element needs a height. `onUse` fires when someone
+presses "Use image" and hands you the URL together with the values behind it.
+
+Without a build step, load both files from a CDN:
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@lamka02sk/picturium-editor/dist/picturium-editor.css">
+<script type="module">
+  import { createEditor } from 'https://cdn.jsdelivr.net/npm/@lamka02sk/picturium-editor/dist/picturium-editor.js';
+</script>
+```
+
+`createEditor()` returns three methods:
+
+<DataTable head={['Method', 'What it does']} cols={['k', '']} rows={[
+  ['url()', 'Returns the current URL, without a signature.'],
+  ['update(options)', 'Changes options in place, for example the locale or the theme. The edited values are kept.'],
+  ['destroy()', 'Unmounts the editor and frees the previews it holds.'],
+]} />
+
+In a component framework, mount it once and destroy it on cleanup:
+
+```tsx
+useEffect(() => {
+    const editor = createEditor(ref.current!, { server, source, onUse });
+    return () => editor.destroy();
+}, [server, source]);
+```
+
+## Options
+
+Only `server` and `source` are required.
+
+<DataTable head={['Option', 'Type', 'Default', 'What it does']} cols={['k', 'd', 'd', '']} rows={[
+  ['server', 'string', '—', 'Base URL of the picturium server.'],
+  ['source', 'string', '—', 'Path of the file under the data directory.'],
+  ['locale', 'en · de · sk · cs · es', 'browser language', 'Language of the interface. An unknown language falls back to English.'],
+  ['messages', 'object', '—', 'Replaces individual strings, or supplies a whole new language together with locale.'],
+  ['theme', 'dark · light · auto', 'auto', 'auto follows the operating system. Disable the theme feature to lock it.'],
+  ['logo', 'URL · false', 'picturium logo', 'Your own logo in the top bar, or false for none.'],
+  ['title', 'string · false', 'Editor', 'Text next to the logo, or false for none.'],
+  ['disable', 'string[]', '[]', 'Groups, single controls and chrome to hide.'],
+  ['formats', 'string[]', 'all formats', 'Output formats on offer, in order.'],
+  ['keys', 'boolean', 'false', 'Prints the parameter names (w, h, fit) next to the labels, for people who also write URLs by hand.'],
+  ['defaults', 'object', '—', 'Values your server applies on its own. They are left out of the URL.'],
+  ['initial', 'object', '—', 'Values the editor opens with.'],
+  ['section', 'string', 'size', 'Group the editor opens on.'],
+  ['previewDelay', 'number (ms)', '250', 'How long a value must rest before a preview is requested.'],
+  ['sign', 'function', '—', 'Signs a URL. Needed for the "Sign the URL" switch.'],
+  ['onUse', 'function', '—', 'Called with (url, params) when "Use image" is pressed. Without it the button is hidden.'],
+  ['onClose', 'function', '—', 'Called when the close button is pressed. Without it the button is hidden.'],
+  ['onChange', 'function', '—', 'Called with (url, params) whenever the URL changes.'],
+]} />
+
+## Switch features off
+
+Most people need three controls, not thirty. `disable` hides whatever you list, at three
+levels:
+
+<DataTable head={['Level', 'Values']} cols={['k', 'd']} rows={[
+  ['A whole group', 'crop · size · canvas · filter · mark · out · motion · deliv'],
+  ['One control', 'size.dpr · size.resample · filter.blur · out.format · out.meta · deliv.force · …'],
+  ['Chrome', 'theme · url · copy · compare · source'],
+]} />
+
+A control is written `group.control`. The chrome values are the light/dark toggle, the
+URL preview in the dock, the copy button, the before/after slider and the source path in
+the top bar.
+
+```ts
+createEditor(el, {
+    server, source,
+    theme: 'light',
+    logo: '/brand/logo.svg',
+    disable: ['motion', 'deliv', 'theme', 'url', 'filter.pixelate'],
+    formats: ['auto', 'webp', 'avif'],
+    initial: { wmMode: 'image', wmImage: 'brand/mark.png' },
+});
+```
+
+A hidden control keeps its value from `initial`, and "Reset" leaves it alone. That is how
+you force a value: set it in `initial` and disable its control. The example above stamps
+every image with the brand mark and gives people no way to remove it.
+
+<img class="shot" src="/editor/editor-crop-light.jpg" alt="Cropping in the light theme: a draggable region over the source image, with the crop controls beside it" width="800" height="499" loading="lazy" />
+
+## Languages
+
+The editor picks English, German, Slovak, Czech or Spanish from the browser language. Pin
+one with `locale`, and override any string with `messages`:
+
+```ts
+createEditor(el, {
+    server, source,
+    locale: 'sk',
+    messages: { 'url.use': 'Vložiť do článku' },
+});
+```
+
+Buttons speak the user's language while the URL keeps speaking picturium: "Fit inside"
+writes [`fit=contain`](/docs/sizing#fit-modes) and "Main subject" writes
+[`g=attention`](/docs/sizing#gravity).
+
+For a language that isn't built in, pass its code as `locale` and every string in
+`messages`. Numbers and plurals then follow that language too. The keys are listed in
+[`src/i18n/en.ts`](https://github.com/picturium/editor/blob/master/src/i18n/en.ts).
+
+## Match the server configuration
+
+The editor leaves out any value that equals picturium's default, which keeps URLs short.
+If your `config.toml` changes a default, tell the editor, otherwise the panel and the
+picture disagree:
+
+```ts
+defaults: { fit: 'contain', q: 'high', upsize: true }
+```
+
+With that, "Fit inside" is the selected fit and adds nothing to the URL, while "Fill"
+writes `fit=cover`.
+
+## Signed URLs
+
+When [signed URLs](/docs/request-model#signed-urls) are on, the editor needs a way to
+sign. It never holds the secret. `sign` receives exactly what picturium signs,
+`path?query` without the token, and returns the hex HMAC, usually from your backend:
+
+```ts
+createEditor(el, {
+    server, source,
+    initial: { sign: true },
+    sign: (payload) => fetch('/api/sign?u=' + encodeURIComponent(payload)).then((r) => r.text()),
+});
+```
+
+`initial: { sign: true }` switches signing on from the start, so the previews are signed
+too. Add `deliv.sign` to `disable` if people shouldn't be able to turn it off.
+
+## Previews and caching
+
+Somebody dragging a slider produces dozens of images that nobody will ask for again. So
+the editor treats a preview as a one-off render:
+
+- It is requested with [`nocache=true`](/docs/request-model#caching--force). picturium
+  then neither reads nor fills its cache and answers `Cache-Control: no-store`.
+- The browser keeps nothing either.
+- Requests are debounced by `previewDelay`, and a newer value aborts the one in flight.
+
+The URL you copy or use never contains `nocache`, so the real image is cached as usual.
+
+Previews are loaded with `fetch`, so the server has to allow the editor's page as a
+[CORS origin](/docs/configuration#cors--logging).
+
+## Layout
+
+The editor reads the size of its own element, not the viewport. Above 1100 px it shows
+the groups in a rail, the stage in the middle and the controls on the right. Below that
+the stage moves to the top and the groups become tabs, and under 600 px everything stacks
+into one column with the URL at the thumb.
+
+So the same editor works as a full page, in a dialog or in a narrow sidebar, without any
+option.
+
+## Good to know
+
+- The crop region is measured in source pixels. While the crop group is open, the stage
+  shows the untouched source so you can drag the region over it.
+- A document output ([`f=pdf`](/docs/documents#pdf)) has no preview. The URL still works.
+- The editor doesn't parse an existing URL. To reopen an image, keep the `params` that
+  `onUse` hands you and pass them back as `initial`.
+- An older picturium server ignores `nocache`. Previews still work there, but they land
+  in its cache.
+
+The source and issue tracker are on [GitHub](https://github.com/picturium/editor). For
+the parameters behind each control, see the [Quick reference](/docs/reference).
